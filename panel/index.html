@@ -139,7 +139,6 @@
       <div id="list" tabindex="0" aria-label="Drive 파일 트리"></div>
     </section>
 
-    <div id="xfers"></div>
     <div id="status" class="muted"><span id="statusText"></span><button type="button" class="icon" id="statusClose" title="닫기" aria-label="닫기"></button></div>
     <div id="quotaWrap" class="muted" hidden>
       <div class="qh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>저장용량</div>
@@ -167,7 +166,7 @@
 
     <dialog id="dlModal">
       <form method="dialog">
-        <b>다운로드 중…</b>
+        <b>전송 중…</b>
         <div id="dlList"></div>
       </form>
     </dialog>
@@ -728,16 +727,16 @@
       const xfers = new Map() // id -> 행
       const ended = new Set() // 행을 만들기 전에 끝난 작업(아주 작은 파일)
       let pinger = null
-      // modal이면 화면 가운데 창(뒷배경 어둡게)에 줄을 넣는다. 창은 그 안의 줄이 다 끝나면 닫힌다.
-      function addXfer(id, label, cancel, modal = false) {
+      // 화면 가운데 창(뒷배경 어둡게)에 줄을 넣는다. 창은 그 안의 줄이 다 끝나면 닫힌다.
+      function addXfer(id, label, cancel) {
         if (ended.delete(id)) return
         const el = document.createElement('div')
         el.className = 'xfer'
         el.innerHTML = `<span class="xl"></span><progress></progress><button type="button" class="icon" title="취소" aria-label="취소">${svg(CLOSE)}</button>`
         el.querySelector('.xl').textContent = label
         el.querySelector('button').onclick = cancel
-        $(modal ? 'dlList' : 'xfers').append(el)
-        if (modal && !$('dlModal').open) $('dlModal').showModal()
+        $('dlList').append(el)
+        if (!$('dlModal').open) $('dlModal').showModal()
         xfers.set(id, el)
         // 요청이 없으면 Orca가 worker를 거둬 진행 중인 다운로드도 끊긴다: 전송 중엔 20초마다 깨워 둔다.
         pinger ??= setInterval(() => {
@@ -768,7 +767,7 @@
           addXfer(job, name, () =>
             req('download.cancel', { job })
               .then((r) => r?.found, () => false)
-              .then((found) => found || (endXfer(job), status('다운로드가 이미 끊겼습니다', true))), true)
+              .then((found) => found || (endXfer(job), status('다운로드가 이미 끊겼습니다', true))))
         } catch (e) {
           status(e.message, true)
         }
