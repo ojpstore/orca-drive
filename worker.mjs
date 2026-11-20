@@ -168,7 +168,11 @@ export default function activate(orca) {
     return {}
   })
 
-  on('drive.about', async () => ({ email: (await api('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).user.emailAddress }))
+  // 용량은 바이트. limit이 없으면 무제한 계정이다.
+  on('drive.about', async () => {
+    const { user, storageQuota: q } = await api('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress),storageQuota(limit,usage)')
+    return { email: user.emailAddress, usage: Number(q.usage ?? 0), limit: q.limit == null ? null : Number(q.limit) }
+  })
 
   on('drive.list', async ({ parent = 'root' }) => {
     const files = []
@@ -229,9 +233,11 @@ export default function activate(orca) {
     return { job }
   })
 
+  // found: false면 이 worker가 모르는 작업(worker가 재시작됨)이라 끝 이벤트가 오지 않는다.
   on('download.cancel', ({ job }) => {
-    jobs.get(job)?.abort()
-    return {}
+    const ac = jobs.get(job)
+    ac?.abort()
+    return { found: !!ac }
   })
 
   on('drive.search', async ({ text }) => {

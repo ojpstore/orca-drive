@@ -39,6 +39,12 @@
       .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .row .size { font-size: 11px; opacity: .7; }
       #status { padding: 4px 10px; border-top: 1px solid var(--orca-border); min-height: 26px; }
+      #quotaWrap { padding: 8px 12px 10px; border-top: 1px solid var(--orca-border); }
+      #quotaWrap:not([hidden]) { display: flex; flex-direction: column; gap: 6px; }
+      #quotaWrap .qh { display: flex; align-items: center; gap: 10px; color: var(--orca-foreground); font-size: 13px; }
+      #quotaWrap .qh svg { width: 18px; height: 18px; fill: currentColor; }
+      #quotaBar { height: 4px; border-radius: 2px; background: var(--orca-border); overflow: hidden; }
+      #quotaFill { height: 100%; width: 0; background: var(--orca-accent); }
       dialog { width: min(280px, calc(100% - 32px)); padding: 0; color: inherit; background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: calc(var(--orca-radius, 6px) + 4px); box-shadow: 0 12px 32px rgb(0 0 0 / .35); }
       dialog::backdrop { background: rgb(0 0 0 / .45); }
       dialog form { display: flex; flex-direction: column; gap: 6px; padding: 16px; word-break: keep-all; overflow-wrap: anywhere; }
@@ -128,6 +134,11 @@
 
     <div id="xfers"></div>
     <div id="status" class="muted"></div>
+    <div id="quotaWrap" class="muted" hidden>
+      <div class="qh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>저장용량</div>
+      <div id="quotaBar"><div id="quotaFill"></div></div>
+      <span id="quota"></span>
+    </div>
     <div id="menu" role="menu" hidden></div>
 
     <dialog id="confirm" onclick="event.target === this && this.close()">
@@ -167,7 +178,9 @@
       let keepAlive = null
       // 새 폴더·업로드 대상: 선택한 폴더, 파일이면 그 부모, 없으면 루트.
       const here = () => (!focus ? 'root' : isDir(focus) ? focus.id : focus.parent)
-      const req = (name, input, timeoutMs = 60000) => orca.plugin.request(name, input, { timeoutMs })
+      // 입력은 JSON 값만 받는다: { exportMime: undefined } 같은 속성은 'Invalid input'이 나므로 JSON으로 한 번 걸러 뺀다.
+      const req = (name, input, timeoutMs = 60000) =>
+        orca.plugin.request(name, input === undefined ? input : JSON.parse(JSON.stringify(input)), { timeoutMs })
 
       function status(text, err = false) {
         $('status').textContent = text
@@ -224,6 +237,7 @@
 
       function show(view) {
         for (const v of ['setup', 'signin', 'main']) $(v).hidden = v !== view
+        if (view !== 'main') $('quotaWrap').hidden = true
       }
 
       async function boot() {
@@ -231,11 +245,19 @@
         if (!s.configured) return show('setup')
         if (!s.signedIn) return show('signin')
         show('main')
-        req('drive.about').then(({ email }) => {
+        about()
+        await load()
+      }
+
+      // 계정 이메일과 하단 저장용량(사용 / 전체).
+      function about() {
+        req('drive.about').then(({ email, usage, limit }) => {
           $('email').textContent = $('email').title = email
           $('avatar').textContent = email[0].toUpperCase()
+          $('quota').textContent = limit ? `${fmtQuota(limit)} 중 ${fmtQuota(usage)} 사용` : `${fmtQuota(usage)} 사용`
+          $('quotaFill').style.width = limit ? `${Math.min(100, (usage / limit) * 100)}%` : '0'
+          $('quotaWrap').hidden = false
         }, () => { $('email').textContent = '' })
-        await load()
       }
 
       // 펼친 폴더를 모두 다시 읽는다(처음, 새로 고침, 모두 펼치기).
@@ -332,7 +354,14 @@
       const ICON = {"txt":"document","md":"markdown","log":"log","rtf":"word","doc":"word","docx":"word","xls":"table","xlsx":"table","xlsm":"table","csv":"table","tsv":"table","ods":"table","ppt":"powerpoint","pptx":"powerpoint","odp":"powerpoint","key":"key","pdf":"pdf","png":"image","jpg":"image","jpeg":"image","gif":"image","bmp":"image","webp":"image","svg":"svg","ico":"image","tiff":"image","heic":"image","psd":"adobe-photoshop","ai":"adobe-illustrator","mp4":"video","mov":"video","avi":"video","mkv":"video","webm":"video","mp3":"audio","wav":"audio","flac":"audio","ogg":"video","m4a":"audio","zip":"zip","rar":"zip","7z":"zip","tar":"zip","gz":"zip","tgz":"zip","exe":"exe","bat":"console","cmd":"console","ps1":"powershell","sh":"console","dll":"dll","js":"javascript","mjs":"javascript","ts":"typescript","tsx":"react_ts","jsx":"react","json":"json","py":"python","java":"java","c":"c","cpp":"cpp","h":"h","cs":"csharp","go":"go","rs":"rust","rb":"ruby","php":"php","html":"html","css":"css","xml":"xml","yml":"yaml","yaml":"yaml","sql":"database","ini":"settings","toml":"toml","env":"tune","pem":"key","hwp":"word","hwpx":"word","msi":"exe","dmg":"exe","document":"word","spreadsheet":"table","presentation":"powerpoint","drawing":"image","form":"document","script":"javascript","video":"video","audio":"audio","map":"document","shortcut":"file","xfdl":"xml"}
       const fileIcon = (f) => ICON[googleKind(f) ?? (f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : '')] ?? 'file'
 
-      const fmtSize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
+      const fmtSize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB` : n < 1 << 30 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${(n / (1 << 30)).toFixed(2)} GB`)
+      // Drive 화면처럼 '5TB', '21.2GB': 1024 단위, 소수 한 자리, .0은 뺀다.
+      const fmtQuota = (n) => {
+        const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+        let i = 0
+        while (n >= 1024 && i < u.length - 1) (n /= 1024), i++
+        return `${+n.toFixed(1)}${u[i]}`
+      }
       const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('ko', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '')
 
       // ---- 그리기 ----
@@ -523,7 +552,7 @@
         const m = []
         if (one) {
           if (isDir(one)) m.push({ label: expanded.has(one.id) ? '접기' : '펼치기', key: 'Enter', run: () => toggle(one.id) })
-          else m.push({ label: kind ? '브라우저에서 열기' : '열기', key: 'Enter', run: () => open(one) })
+          else if (kind) m.push({ label: '브라우저에서 열기', key: 'Enter', run: () => open(one) })
           if (!kind || isDir(one)) m.push({ label: '웹에서 열기', run: () => openWeb(one) })
           m.push({ label: '링크 복사', run: () => copyLink(one) })
         }
@@ -677,7 +706,11 @@
       async function download(f, { open = true, exportMime, name = f.name } = {}) {
         try {
           const { job } = await req('download.start', { id: f.id, name, exportMime, open })
-          addXfer(job, name, () => req('download.cancel', { job }))
+          // 끝 이벤트가 오지 않을 경우(요청 실패·worker 재시작)엔 줄을 직접 지운다.
+          addXfer(job, name, () =>
+            req('download.cancel', { job })
+              .then((r) => r?.found, () => false)
+              .then((found) => found || (endXfer(job), status('다운로드가 이미 끊겼습니다', true))))
         } catch (e) {
           status(e.message, true)
         }
@@ -840,7 +873,7 @@
         const r = await orca.shell?.openExternal(url.href).catch((e) => ({ opened: false, reason: e.message }))
         if (!r?.opened) status(`열지 못했습니다${r?.reason ? ': ' + r.reason : ''}`, true)
       }
-      $('refresh').onclick = () => act('새로 고침', async () => {}, true)
+      $('refresh').onclick = () => (about(), act('새로 고침', async () => {}, true))
       $('mkdir').onclick = mkdir
       $('del').onclick = trash
       $('upload').onclick = () => $('pick').click()
