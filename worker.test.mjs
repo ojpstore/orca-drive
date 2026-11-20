@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { authUrl, contentRange, listQuery } from './worker.mjs'
+import { join } from 'node:path'
+import { authUrl, contentRange, downloadPath, listQuery, searchQuery } from './worker.mjs'
+import { EXPORTS, filterTree, googleKind, rangeIds, sortFiles, uniqueName, withExt } from './panel/lib.mjs'
 
 test('listQuery escapes quotes and backslashes', () => {
   assert.equal(listQuery('root'), "'root' in parents and trashed = false")
@@ -20,4 +22,67 @@ test('authUrl carries PKCE, offline access and redirect', () => {
   assert.equal(u.searchParams.get('code_challenge_method'), 'S256')
   assert.equal(u.searchParams.get('access_type'), 'offline')
   assert.equal(u.searchParams.get('state'), 'st')
+})
+
+test('downloadPath sanitizes and avoids existing names', () => {
+  const taken = new Set([join('D', 'a.txt'), join('D', 'a (1).txt')])
+  const has = (p) => taken.has(p)
+  assert.equal(downloadPath('a.txt', 'D', has), join('D', 'a (2).txt'))
+  assert.equal(downloadPath('../x/y:z.md', 'D', has), join('D', '_x_y_z.md'))
+  assert.equal(downloadPath('..', 'D', has), join('D', 'download'))
+  assert.equal(downloadPath(String.raw`..\..\evil.exe`, 'D', has), join('D', '_.._evil.exe')) // Windows 경로 탈출 방지
+  assert.equal(downloadPath('a\u0000b', 'D', has), join('D', 'a_b'))
+})
+
+test('searchQuery escapes and searches name and content', () => {
+  assert.equal(searchQuery("it's"), String.raw`(name contains 'it\'s' or fullText contains 'it\'s') and trashed = false`)
+})
+
+const F = 'application/vnd.google-apps.folder'
+const f = (name, extra = {}) => ({ id: name, name, mimeType: 'text/plain', ...extra })
+const d = (name) => ({ id: name, name, mimeType: F })
+
+test('sortFiles keeps folders first and sorts by key and direction', () => {
+  const files = [f('b.txt', { size: '5', modifiedTime: '2024-01-02' }), d('z'), f('a10.txt', { size: '1', modifiedTime: '2024-01-03' }), f('a9.txt', { size: '9', modifiedTime: '2024-01-01' }), d('y')]
+  const names = (k, dir) => sortFiles(files, k, dir).map((x) => x.name).join(' ')
+  assert.equal(names('name', 1), 'y z a9.txt a10.txt b.txt') // 숫자는 자연 정렬
+  assert.equal(names('name', -1), 'z y b.txt a10.txt a9.txt')
+  assert.equal(names('size', -1), 'y z a9.txt b.txt a10.txt')
+  assert.equal(names('modified', -1), 'y z a10.txt b.txt a9.txt')
+})
+
+test('uniqueName and withExt', () => {
+  assert.equal(uniqueName('a.txt', new Set(['a.txt', 'a (1).txt'])), 'a (2).txt')
+  assert.equal(uniqueName('folder', new Set(['folder'])), 'folder (1)')
+  assert.equal(uniqueName('.env', new Set(['.env'])), '.env (1)')
+  assert.equal(withExt('보고서', 'pdf'), '보고서.pdf')
+  assert.equal(withExt('data.CSV', 'csv'), 'data.CSV')
+})
+
+test('filterTree shows matches and their ancestors only, survives cycles', () => {
+  const kids = new Map([
+    ['root', [d('docs'), d('pics'), f('readme.md')]],
+    ['docs', [f('plan.txt'), d('old')]],
+    ['old', [f('Plan-v1.txt'), d('docs')]], // 순환
+    ['pics', [f('cat.png')]]
+  ])
+  assert.deepEqual([...filterTree(kids, 'root', 'plan')].sort(), ['Plan-v1.txt', 'docs', 'old', 'plan.txt'])
+  assert.equal(filterTree(kids, 'root', 'zzz').size, 0)
+})
+
+test('rangeIds works in both directions', () => {
+  const order = ['a', 'b', 'c', 'd']
+  assert.deepEqual(rangeIds(order, 'b', 'd'), ['b', 'c', 'd'])
+  assert.deepEqual(rangeIds(order, 'd', 'b'), ['b', 'c', 'd'])
+  assert.deepEqual(rangeIds(order, 'x', 'c'), ['c'])
+})
+
+test('EXPORTS cover Google Docs, Sheets, Slides with office and pdf formats', () => {
+  for (const k of ['document', 'spreadsheet', 'presentation']) {
+    const exts = EXPORTS[k].map(([, , ext]) => ext)
+    assert.ok(exts.includes('pdf'), k)
+  }
+  assert.ok(EXPORTS.spreadsheet.some(([, , e]) => e === 'csv'))
+  assert.equal(googleKind({ mimeType: 'application/vnd.google-apps.spreadsheet' }), 'spreadsheet')
+  assert.equal(googleKind({ mimeType: 'text/plain' }), null)
 })

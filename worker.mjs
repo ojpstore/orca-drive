@@ -1,16 +1,28 @@
 // Google Drive REST v3 호출과 OAuth 로그인을 맡는다. 패널은 네트워크·소켓을 못 쓰므로 worker가 한다.
 import { createHash, randomBytes } from 'node:crypto'
+import { spawn } from 'node:child_process'
+import { createWriteStream, existsSync } from 'node:fs'
+import { unlink } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { homedir } from 'node:os'
+import { join, parse } from 'node:path'
+import tls from 'node:tls'
+
+// 회사 TLS 검사(예: Somansa)의 루트 CA는 OS 인증서 저장소에만 있고, Orca worker엔 NODE_EXTRA_CA_CERTS도 안 넘어온다.
+tls.setDefaultCACertificates?.([...tls.getCACertificates('default'), ...tls.getCACertificates('system')])
 
 const API = 'https://www.googleapis.com/drive/v3/files'
-const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id'
+const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files'
 const TOKEN = 'https://oauth2.googleapis.com/token'
 const SCOPE = 'https://www.googleapis.com/auth/drive'
 export const FOLDER = 'application/vnd.google-apps.folder'
-const FIELDS = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)'
+const FIELDS = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,parents)'
 
 // Drive 검색식의 문자열 리터럴은 ' 와 \ 를 \ 로 이스케이프한다.
-export const listQuery = (parent) => `'${String(parent).replace(/['\\]/g, '\\$&')}' in parents and trashed = false`
+const lit = (v) => `'${String(v).replace(/['\\]/g, '\\$&')}'`
+export const listQuery = (parent) => `${lit(parent)} in parents and trashed = false`
+// 이름 또는 본문에 text가 들어간 파일(휴지통 제외).
+export const searchQuery = (text) => `(name contains ${lit(text)} or fullText contains ${lit(text)}) and trashed = false`
 
 export function authUrl({ clientId, redirect, challenge, state }) {
   const u = new URL('https://accounts.google.com/o/oauth2/v2/auth')
@@ -31,6 +43,22 @@ export function authUrl({ clientId, redirect, challenge, state }) {
 // 재개 가능 업로드의 Content-Range. 빈 파일은 'bytes */0'.
 export const contentRange = (offset, length, total) =>
   length ? `bytes ${offset}-${offset + length - 1}/${total}` : `bytes */${total}`
+
+// 다운로드 폴더 안의 저장 경로. 경로 문자는 _ 로 바꾸고, 같은 이름이 있으면 'a (1).txt' 식으로 피한다.
+export function downloadPath(name, dir = join(homedir(), 'Downloads'), exists = existsSync) {
+  const safe = String(name).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/^[. ]+|[. ]+$/g, '') || 'download'
+  const { name: base, ext } = parse(safe)
+  let p = join(dir, safe)
+  for (let i = 1; exists(p); i++) p = join(dir, `${base} (${i})${ext}`)
+  return p
+}
+
+// OS 기본 프로그램으로 연다.
+function openPath(p) {
+  const [cmd, args] =
+    process.platform === 'win32' ? ['explorer.exe', [p]] : process.platform === 'darwin' ? ['open', [p]] : ['xdg-open', [p]]
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
+}
 
 const b64url = (buf) => buf.toString('base64url')
 
@@ -118,7 +146,7 @@ export default function activate(orca) {
         })
         if (json.refresh_token) await orca.secrets.set('refreshToken', json.refresh_token)
       } catch (e) {
-        msg = `로그인 실패: ${e.message}`
+        msg = `로그인 실패: ${e.message}${e.cause ? ` (${e.cause.code ?? ''} ${e.cause.message ?? e.cause})` : ''}`
       }
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(msg)
       server.close()
@@ -140,6 +168,8 @@ export default function activate(orca) {
     return {}
   })
 
+  on('drive.about', async () => ({ email: (await api('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).user.emailAddress }))
+
   on('drive.list', async ({ parent = 'root' }) => {
     const files = []
     let pageToken = ''
@@ -153,6 +183,66 @@ export default function activate(orca) {
     return { files }
   })
 
+  // 다운로드는 백그라운드 작업이다(패널 요청 120초 제한을 넘는 큰 파일도 받게).
+  // 진행률은 'download.progress', 끝은 'download.done' / 'download.error' 이벤트로 알린다.
+  // exportMime이 있으면 Google 문서를 그 형식으로 변환해 받는다.
+  const jobs = new Map() // job -> AbortController
+  on('download.start', async ({ id, name, exportMime, open = true }) => {
+    const job = b64url(randomBytes(9))
+    const ac = new AbortController()
+    jobs.set(job, ac)
+    const url = exportMime
+      ? `${API}/${encodeURIComponent(id)}/export?mimeType=${encodeURIComponent(exportMime)}`
+      : `${API}/${encodeURIComponent(id)}?alt=media`
+    const run = async () => {
+      let path
+      try {
+        const res = await fetch(url, { headers: { authorization: `Bearer ${await accessToken()}` }, signal: ac.signal })
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error?.message || `download ${res.status}`)
+        const total = Number(res.headers.get('content-length')) || 0
+        path = downloadPath(name)
+        const out = createWriteStream(path, { flags: 'wx' })
+        let received = 0
+        let last = 0
+        try {
+          for await (const chunk of res.body) {
+            if (!out.write(chunk)) await new Promise((r) => out.once('drain', r))
+            received += chunk.length
+            if (Date.now() - last > 250) {
+              last = Date.now()
+              orca.panels.post('download.progress', { job, received, total })
+            }
+          }
+        } finally {
+          await new Promise((resolve, reject) => out.end((e) => (e ? reject(e) : resolve())))
+        }
+        if (open) openPath(path)
+        orca.panels.post('download.done', { job, path })
+      } catch (e) {
+        if (path) await unlink(path).catch(() => {}) // 반쯤 받은 파일은 지운다
+        orca.panels.post('download.error', { job, cancelled: ac.signal.aborted, message: e.message })
+      } finally {
+        jobs.delete(job)
+      }
+    }
+    run()
+    return { job }
+  })
+
+  on('download.cancel', ({ job }) => {
+    jobs.get(job)?.abort()
+    return {}
+  })
+
+  on('drive.search', async ({ text }) => {
+    const q = new URLSearchParams({ q: searchQuery(text), fields: FIELDS, pageSize: '200' })
+    return { files: (await api(`${API}?${q}`)).files }
+  })
+
+  on('drive.rename', ({ id, name }) => api(`${API}/${encodeURIComponent(id)}?fields=id`, jsonInit('PATCH', { name })))
+
+  on('drive.copy', ({ id, name }) => api(`${API}/${encodeURIComponent(id)}/copy?fields=id`, jsonInit('POST', { name })))
+
   on('drive.mkdir', ({ parent = 'root', name }) =>
     api(`${API}?fields=id`, jsonInit('POST', { name, mimeType: FOLDER, parents: [parent] })))
 
@@ -164,16 +254,18 @@ export default function activate(orca) {
     return api(`${API}/${encodeURIComponent(id)}?${q}`, jsonInit('PATCH', {}))
   })
 
-  on('upload.start', async ({ parent = 'root', name, mimeType, size }) => {
-    const res = await fetch(UPLOAD, {
-      method: 'POST',
+  // replaceId가 있으면 그 파일의 새 버전으로 올린다(이름·위치·공유 유지).
+  on('upload.start', async ({ parent = 'root', name, mimeType, size, replaceId }) => {
+    const url = replaceId ? `${UPLOAD}/${encodeURIComponent(replaceId)}` : UPLOAD
+    const res = await fetch(`${url}?uploadType=resumable&fields=id`, {
+      method: replaceId ? 'PATCH' : 'POST',
       headers: {
         authorization: `Bearer ${await accessToken()}`,
         'content-type': 'application/json; charset=UTF-8',
         'x-upload-content-length': String(size),
         ...(mimeType && { 'x-upload-content-type': mimeType })
       },
-      body: JSON.stringify({ name, parents: [parent] })
+      body: JSON.stringify(replaceId ? {} : { name, parents: [parent] })
     })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error?.message || `upload ${res.status}`)
     const id = b64url(randomBytes(9))
@@ -191,5 +283,13 @@ export default function activate(orca) {
     uploads.delete(id)
     if (!res.ok) throw new Error(`upload ${res.status}: ${await res.text()}`)
     return { done: true }
+  })
+
+  // 업로드 취소: 세션을 지우면 Drive가 받은 조각을 버린다.
+  on('upload.cancel', async ({ id }) => {
+    const session = uploads.get(id)
+    uploads.delete(id)
+    if (session) await fetch(session, { method: 'DELETE' }).catch(() => {})
+    return {}
   })
 }

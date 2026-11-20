@@ -17,22 +17,64 @@
       button { background: var(--orca-muted); border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px); padding: 2px 8px; cursor: pointer; }
       button:disabled { opacity: .5; cursor: default; }
       button.danger { color: var(--orca-destructive-foreground, #e5484d); }
+      button.icon { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; background: transparent; border-color: transparent; color: var(--orca-muted-foreground); transition: background .12s, color .12s; }
+      button.icon:hover:not(:disabled) { background: var(--orca-muted); color: var(--orca-foreground); }
+      button.icon.danger:hover:not(:disabled) { color: var(--orca-destructive-foreground, #e5484d); background: color-mix(in srgb, var(--orca-destructive-foreground, #e5484d) 15%, transparent); }
+      button.icon:disabled { opacity: .35; }
+      button.icon svg { width: 18px; height: 18px; fill: currentColor; }
       input { width: 100%; padding: 4px 6px; background: var(--orca-input, transparent); border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px); }
       .pad { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
       .muted { color: var(--orca-muted-foreground); font-size: 12px; }
       .bar { display: flex; gap: 4px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--orca-border); }
-      .crumbs { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-      .crumbs span { cursor: pointer; padding: 0 4px; border-radius: 4px; }
-      .crumbs span:hover, .crumbs span.over { background: var(--orca-muted); }
       #list { flex: 1; overflow: auto; }
       .row { display: flex; gap: 6px; align-items: center; padding: 3px 10px; cursor: default; user-select: none; }
       .row:hover { background: var(--orca-muted); }
       .row.sel { background: var(--orca-accent); color: var(--orca-accent-foreground); }
       .row.over { outline: 2px solid var(--orca-accent); outline-offset: -2px; }
+      .row .twisty { width: 16px; height: 16px; flex: none; display: grid; place-items: center; cursor: pointer; color: var(--orca-muted-foreground); border-radius: 4px; }
+      .row .twisty:hover { background: color-mix(in srgb, currentColor 18%, transparent); }
+      .row .twisty svg { width: 16px; height: 16px; fill: currentColor; transition: transform .12s; }
+      .row .twisty.open svg { transform: rotate(90deg); }
+      .row .ficon { width: 16px; height: 16px; flex: none; }
       .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .row .size { font-size: 11px; opacity: .7; }
       #status { padding: 4px 10px; border-top: 1px solid var(--orca-border); min-height: 26px; }
+      dialog { width: min(280px, calc(100% - 32px)); padding: 0; color: inherit; background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: calc(var(--orca-radius, 6px) + 4px); box-shadow: 0 12px 32px rgb(0 0 0 / .35); }
+      dialog::backdrop { background: rgb(0 0 0 / .45); }
+      dialog form { display: flex; flex-direction: column; gap: 6px; padding: 16px; word-break: keep-all; overflow-wrap: anywhere; }
+      dialog .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+      dialog button { padding: 4px 12px; }
+      .account { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+      .avatar { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-size: 12px; font-weight: 600; color: var(--orca-accent-foreground, #fff); background: linear-gradient(135deg, #4285f4, #34a853); }
+      .avatar svg { width: 15px; height: 15px; fill: currentColor; }
+      .who { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+      .who b { font-size: 12px; font-weight: 600; }
+      .who span { font-size: 11px; color: var(--orca-muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .who span:empty { display: none; }
       #status.err { color: var(--orca-destructive-foreground, #e5484d); }
+      #list:focus { outline: none; }
+      #list:focus .row.focus:not(.sel) { box-shadow: inset 0 0 0 1px var(--orca-accent); }
+      .search { flex: 1; min-width: 0; position: relative; }
+      .search svg { position: absolute; left: 7px; top: 50%; translate: 0 -50%; width: 14px; height: 14px; fill: var(--orca-muted-foreground); pointer-events: none; }
+      .search input { height: 26px; padding: 0 8px 0 26px; font-size: 12px; }
+      .search input:focus { outline: none; border-color: var(--orca-accent); }
+      dialog input { margin-top: 6px; }
+      dialog button.primary { background: var(--orca-accent); border-color: transparent; color: var(--orca-accent-foreground, #fff); }
+      dialog button.danger { background: var(--orca-destructive, #e5484d); border-color: transparent; color: #fff; }
+      #menu { position: fixed; z-index: 10; min-width: 190px; max-width: calc(100% - 8px); padding: 4px; display: flex; flex-direction: column; background: var(--orca-popover, var(--orca-background)); border: 1px solid var(--orca-border); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
+      #menu .mi { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px; background: transparent; border: 0; border-radius: 4px; text-align: left; font-size: 12px; }
+      #menu .mi:hover, #menu .mi:focus-visible { background: var(--orca-muted); outline: none; }
+      #menu .mi.danger { color: var(--orca-destructive, #e5484d); }
+      #menu .ck { width: 14px; height: 14px; flex: none; }
+      #menu .ck svg { width: 14px; height: 14px; fill: currentColor; }
+      #menu .lb { flex: 1; white-space: nowrap; }
+      #menu .kb { font-size: 11px; opacity: .55; }
+      #menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--orca-border); }
+      .xfer { display: flex; align-items: center; gap: 8px; padding: 3px 6px 3px 10px; border-top: 1px solid var(--orca-border); font-size: 12px; }
+      .xfer .xl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .xfer progress { width: 72px; height: 4px; accent-color: var(--orca-accent); }
+      .xfer button.icon { width: 20px; height: 20px; }
+      .xfer button.icon svg { width: 14px; height: 14px; }
     </style>
   </head>
   <body>
@@ -56,41 +98,83 @@
     <!-- 3) 파일 목록 -->
     <section id="main" hidden style="display: contents">
       <div class="bar">
-        <div class="crumbs" id="crumbs"></div>
-        <button id="mkdir" title="새 폴더">＋폴더</button>
-        <button id="del" class="danger" title="휴지통으로 (Delete)" disabled>삭제</button>
-        <button id="refresh" title="새로 고침">⟳</button>
-        <button id="logout" title="로그아웃">⎋</button>
+        <div class="account">
+          <span class="avatar" id="avatar"><svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" /></svg></span>
+          <div class="who">
+            <b>Google Drive</b>
+            <span id="email">계정 확인 중…</span>
+          </div>
+        </div>
+        <button id="openWeb" class="icon" title="웹에서 Google Drive 열기" aria-label="웹에서 Google Drive 열기"><svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" /></svg></button>
+        <button id="logout" class="icon" title="로그아웃" aria-label="로그아웃"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" /></svg></button>
       </div>
-      <div class="bar" id="newFolder" hidden>
-        <input id="folderName" placeholder="새 폴더 이름 (Enter)" />
+      <div class="bar" style="justify-content: flex-end; gap: 2px; padding-block: 2px">
+        <button id="upload" class="icon" title="파일 업로드" aria-label="파일 업로드"><svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z" /></svg></button>
+        <input id="pick" type="file" multiple hidden />
+        <button id="mkdir" class="icon" title="새 폴더" aria-label="새 폴더"><svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z" /></svg></button>
+        <button id="del" class="icon danger" title="휴지통으로 (Delete)" aria-label="삭제" disabled><svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4z" /></svg></button>
+        <button id="sort" class="icon" title="정렬" aria-label="정렬"><svg viewBox="0 0 24 24"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" /></svg></button>
+        <button id="refresh" class="icon" title="새로 고침" aria-label="새로 고침"><svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg></button>
+        <button id="fold" class="icon" title="모두 펼치기" aria-label="모두 펼치기/접기"><svg viewBox="0 0 24 24"><path id="foldIcon" d="M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z" /></svg></button>
       </div>
-      <div id="list" tabindex="0"></div>
+      <div class="bar" style="padding-block: 4px">
+        <label class="search">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /></svg>
+          <input id="q" type="search" placeholder="필터 · Enter: Drive 검색" aria-label="필터, Enter로 Drive 전체 검색" />
+        </label>
+      </div>
+      <div id="list" tabindex="0" aria-label="Drive 파일 트리"></div>
     </section>
 
+    <div id="xfers"></div>
     <div id="status" class="muted"></div>
+    <div id="menu" role="menu" hidden></div>
+
+    <dialog id="confirm" onclick="event.target === this && this.close()">
+      <form method="dialog">
+        <b id="confirmTitle"></b>
+        <div id="confirmDetail" class="muted"></div>
+        <input id="confirmInput" hidden />
+        <div class="actions" id="confirmActions"></div>
+      </form>
+    </dialog>
 
     <script type="module">
-      const $ = (id) => document.getElementById(id)
-      const FOLDER = 'application/vnd.google-apps.folder'
-      const DRAG_TYPE = 'application/x-drive-item'
-      // 재개 가능 업로드 조각은 256 KiB 배수여야 한다.
-      // ponytail: 1 MiB 조각을 base64로 worker에 넘긴다. 큰 파일이 느리면 조각을 키울 것.
-      const CHUNK = 1024 * 1024
+      import { FOLDER, isDir, googleKind, sortFiles, uniqueName, withExt, EXPORTS, filterTree, rangeIds } from './lib.mjs'
 
-      let path = [{ id: 'root', name: '내 드라이브' }]
-      let files = []
-      let selected = null
+      const $ = (id) => document.getElementById(id)
+      const DRAG_TYPE = 'application/x-drive-items'
+      // 재개 가능 업로드 조각은 256 KiB 배수여야 한다. base64로 worker에 넘기므로 요청 하나가 ~5.5 MB.
+      const CHUNK = 4 * 1024 * 1024
+      const svg = (d) => `<svg viewBox="0 0 24 24"><path d="${d}" /></svg>`
+      const CHECK = 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'
+      const CLOSE = 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'
+      const UNFOLD_MORE = 'M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z'
+      const UNFOLD_LESS = 'M7.41 18.59L8.83 20 12 16.83 15.17 20l1.41-1.41L12 14l-4.59 4.59zm9.18-13.18L15.17 4 12 7.17 8.83 4 7.41 5.41 12 10l4.59-4.59z'
+
+      const ROOT = { id: 'root', name: '내 드라이브', mimeType: FOLDER }
+      const kids = new Map() // 폴더 id -> 불러온 자식 목록
+      const expanded = new Set(['root'])
+      const sel = new Map() // 선택한 항목: id -> { ...file, parent }
+      let focus = null // 키보드 커서(마지막으로 고른 항목)
+      let anchor = null // Shift 범위 선택의 시작점
+      let order = [] // 화면에 보이는 항목 id 순서(render가 채운다)
+      let rowItems = new Map() // id -> { ...file, parent } (render가 채운다)
+      let sort = { key: 'name', dir: 1 }
+      let filter = '' // 불러온 트리 안 빠른 필터
+      let results = null // Drive 전체 검색 결과. null이면 트리를 보인다
       let authUrl = null
-      const here = () => path[path.length - 1].id
+      let keepAlive = null
+      // 새 폴더·업로드 대상: 선택한 폴더, 파일이면 그 부모, 없으면 루트.
+      const here = () => (!focus ? 'root' : isDir(focus) ? focus.id : focus.parent)
       const req = (name, input, timeoutMs = 60000) => orca.plugin.request(name, input, { timeoutMs })
 
       function status(text, err = false) {
         $('status').textContent = text
         $('status').className = err ? 'err' : 'muted'
       }
-      // 모든 동작을 여기로: 오류를 상태줄에 보이고, 끝나면 목록을 다시 읽는다.
-      async function act(label, fn, reload = true) {
+      // 모든 동작을 여기로: 오류를 상태줄에 보이고, 끝나면 바뀐 폴더만 다시 읽는다(true면 전체).
+      async function act(label, fn, after = []) {
         status(label + '…')
         try {
           await fn()
@@ -98,7 +182,44 @@
         } catch (e) {
           status(e.message, true)
         }
-        if (reload) await load()
+        if (after === true) await load()
+        else if (after) await refresh(after)
+      }
+
+      // 팝업. buttons: [{ label, value, kind: 'primary'|'danger' }]. 취소는 늘 맨 앞에 붙는다.
+      // input을 주면 입력칸을 보이고 { value, text }를 돌려준다(취소·Esc·바깥 클릭이면 value === '').
+      function ask({ title, detail = '', buttons, input, selectAll = true }) {
+        const d = $('confirm')
+        const box = $('confirmInput')
+        $('confirmTitle').textContent = title
+        $('confirmDetail').textContent = detail
+        $('confirmDetail').hidden = !detail
+        box.hidden = input == null
+        box.value = input ?? ''
+        const acts = $('confirmActions')
+        acts.replaceChildren()
+        for (const b of [{ label: '취소', value: '' }, ...buttons]) {
+          const el = document.createElement('button')
+          el.value = b.value
+          el.textContent = b.label
+          if (b.kind) el.className = b.kind
+          acts.append(el)
+        }
+        d.returnValue = ''
+        d.showModal()
+        if (input == null) acts.firstChild.focus()
+        else {
+          box.focus()
+          const dot = input.lastIndexOf('.')
+          box.setSelectionRange(0, selectAll || dot <= 0 ? input.length : dot)
+        }
+        return new Promise((resolve) => d.addEventListener('close', () => resolve({ value: d.returnValue, text: box.value }), { once: true }))
+      }
+      // 입력칸에서 Enter는 마지막(주) 버튼.
+      $('confirmInput').onkeydown = (e) => {
+        if (e.key !== 'Enter') return
+        e.preventDefault()
+        $('confirm').close($('confirmActions').lastChild.value)
       }
 
       function show(view) {
@@ -110,79 +231,551 @@
         if (!s.configured) return show('setup')
         if (!s.signedIn) return show('signin')
         show('main')
+        req('drive.about').then(({ email }) => {
+          $('email').textContent = $('email').title = email
+          $('avatar').textContent = email[0].toUpperCase()
+        }, () => { $('email').textContent = '' })
         await load()
       }
 
+      // 펼친 폴더를 모두 다시 읽는다(처음, 새로 고침, 모두 펼치기).
       async function load() {
         if ($('main').hidden) return
         try {
-          files = (await req('drive.list', { parent: here() })).files
+          await Promise.all([...expanded].map((id) => fetchKids(id, true)))
+          if (results) await search()
         } catch (e) {
-          files = []
           status(e.message, true)
         }
-        if (!files.some((f) => f.id === selected)) selected = null
+        prune()
+        render()
+        for (const id of expanded) prefetch(id)
+      }
+
+      // 바뀐 폴더만 다시 읽는다(만들기·삭제·이동·이름 바꾸기·업로드 뒤). 아직 안 불러온 폴더는 건너뛴다.
+      async function refresh(ids) {
+        const todo = [...new Set(ids)].filter((id) => kids.has(id) || expanded.has(id))
+        await Promise.all(todo.map((id) => fetchKids(id, true).catch((e) => status(e.message, true))))
+        if (results) await search().catch((e) => status(e.message, true))
+        prune()
         render()
       }
 
-      const fmtSize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
+      // 다시 읽은 목록에서 사라진 항목은 선택에서 뺀다.
+      function prune() {
+        const gone = (f) => kids.has(f.parent) && !kids.get(f.parent).some((c) => c.id === f.id) && !results?.some((c) => c.id === f.id)
+        for (const f of [...sel.values()]) if (gone(f)) sel.delete(f.id)
+        if (focus && gone(focus)) focus = anchor = null
+      }
 
+      // 폴더 목록 요청. 같은 폴더를 동시에 두 번 부르지 않는다(미리 읽기 중이면 그 결과를 기다린다).
+      const inflight = new Map()
+      function fetchKids(id, fresh = false) {
+        if (fresh || !inflight.has(id))
+          inflight.set(id, req('drive.list', { parent: id }).then((r) => kids.set(id, r.files).get(id)).finally(() => inflight.delete(id)))
+        return inflight.get(id)
+      }
+
+      // Drive 호출은 한 번에 ~400ms라, 펼친 폴더의 하위 폴더 목록을 미리 받아 두어 클릭하면 바로 열리게 한다.
+      // ponytail: 한 단계 앞만, 4개씩 읽는다. 하위 폴더가 아주 많으면 화면에 보이는 것만 읽도록 바꿀 것.
+      async function prefetch(id) {
+        const todo = (kids.get(id) ?? []).filter((f) => isDir(f) && !kids.has(f.id)).map((f) => f.id)
+        for (let i = 0; i < todo.length; i += 4) await Promise.all(todo.slice(i, i + 4).map((c) => fetchKids(c).catch(() => {})))
+      }
+
+      async function toggle(id) {
+        if (expanded.delete(id)) return render()
+        expanded.add(id)
+        render() // 미리 받아 둔 게 없으면 '불러오는 중…' 줄을 먼저 보인다.
+        if (!kids.has(id)) {
+          try {
+            await fetchKids(id)
+          } catch (e) {
+            expanded.delete(id)
+            status(e.message, true)
+          }
+          render()
+        }
+        prefetch(id)
+      }
+
+      // ---- 검색 / 필터 ----
+      async function search() {
+        results = (await req('drive.search', { text: $('q').value.trim() })).files
+      }
+      $('q').oninput = () => {
+        filter = $('q').value.trim()
+        if (!filter) results = null
+        render()
+      }
+      $('q').onkeydown = async (e) => {
+        if (e.key === 'Escape') {
+          $('q').value = filter = ''
+          results = null
+          render()
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          $('list').focus()
+        } else if (e.key === 'Enter' && filter) {
+          status('검색 중…')
+          try {
+            await search()
+            status(`Drive 검색 결과 ${results.length}개${results.length === 200 ? ' (처음 200개)' : ''}`)
+          } catch (e) {
+            status(e.message, true)
+          }
+          render()
+        }
+      }
+
+      // 확장자(또는 Google 문서 종류) -> icons/<이름>.svg (Material Icon Theme, MIT). 없으면 file.
+      const ICON = {"txt":"document","md":"markdown","log":"log","rtf":"word","doc":"word","docx":"word","xls":"table","xlsx":"table","xlsm":"table","csv":"table","tsv":"table","ods":"table","ppt":"powerpoint","pptx":"powerpoint","odp":"powerpoint","key":"key","pdf":"pdf","png":"image","jpg":"image","jpeg":"image","gif":"image","bmp":"image","webp":"image","svg":"svg","ico":"image","tiff":"image","heic":"image","psd":"adobe-photoshop","ai":"adobe-illustrator","mp4":"video","mov":"video","avi":"video","mkv":"video","webm":"video","mp3":"audio","wav":"audio","flac":"audio","ogg":"video","m4a":"audio","zip":"zip","rar":"zip","7z":"zip","tar":"zip","gz":"zip","tgz":"zip","exe":"exe","bat":"console","cmd":"console","ps1":"powershell","sh":"console","dll":"dll","js":"javascript","mjs":"javascript","ts":"typescript","tsx":"react_ts","jsx":"react","json":"json","py":"python","java":"java","c":"c","cpp":"cpp","h":"h","cs":"csharp","go":"go","rs":"rust","rb":"ruby","php":"php","html":"html","css":"css","xml":"xml","yml":"yaml","yaml":"yaml","sql":"database","ini":"settings","toml":"toml","env":"tune","pem":"key","hwp":"word","hwpx":"word","msi":"exe","dmg":"exe","document":"word","spreadsheet":"table","presentation":"powerpoint","drawing":"image","form":"document","script":"javascript","video":"video","audio":"audio","map":"document","shortcut":"file","xfdl":"xml"}
+      const fileIcon = (f) => ICON[googleKind(f) ?? (f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : '')] ?? 'file'
+
+      const fmtSize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
+      const fmtDate = (t) => (t ? new Date(t).toLocaleDateString('ko', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '')
+
+      // ---- 그리기 ----
       function render() {
-        const crumbs = $('crumbs')
-        crumbs.replaceChildren()
-        path.forEach((p, i) => {
-          if (i) crumbs.append('›')
-          const s = document.createElement('span')
-          s.textContent = p.name
-          s.onclick = () => go(path.slice(0, i + 1))
-          dropTarget(s, p.id)
-          crumbs.append(s)
-        })
+        const folded = expanded.size <= 1
+        $('fold').title = folded ? '모두 펼치기' : '모두 접기'
+        $('foldIcon').setAttribute('d', folded ? UNFOLD_MORE : UNFOLD_LESS)
         const list = $('list')
         list.replaceChildren()
-        if (!files.length) {
-          const e = document.createElement('div')
-          e.className = 'pad muted'
-          e.textContent = '비어 있습니다. 파일을 여기로 끌어다 놓으면 업로드됩니다.'
-          list.append(e)
+        order = []
+        rowItems = new Map()
+        if (results) {
+          note(list, `Drive 검색 결과 ${results.length}개 · Esc: 트리로`)
+          for (const f of sortFiles(results, sort.key, sort.dir)) addRow(list, f, f.parents?.[0] ?? 'root', 0, null)
+        } else {
+          const show = filter ? filterTree(kids, 'root', filter) : null
+          addRow(list, ROOT, null, 0, show)
+          if (show && !show.size) note(list, '불러온 폴더에 일치하는 항목이 없습니다. Enter: Drive 전체 검색')
         }
-        for (const f of files) {
-          const isDir = f.mimeType === FOLDER
-          const row = document.createElement('div')
-          row.className = 'row' + (f.id === selected ? ' sel' : '')
+        list.querySelector('.focus')?.scrollIntoView({ block: 'nearest' })
+        $('del').disabled = !sel.size
+      }
+
+      function note(list, text, indent = 10) {
+        const e = document.createElement('div')
+        e.className = 'row muted'
+        e.style.paddingLeft = `${indent}px`
+        e.textContent = text
+        list.append(e)
+      }
+
+      function addRow(list, f, parent, depth, show) {
+        const dir = isDir(f)
+        const children = dir ? sortFiles((kids.get(f.id) ?? []).filter((c) => !show || show.has(c.id)), sort.key, sort.dir) : []
+        // 필터 중엔 일치하는 하위 항목이 있는 폴더를 펼쳐 보인다.
+        const isOpen = dir && (expanded.has(f.id) || (!!show && children.length > 0))
+        const item = { ...f, parent }
+        const row = document.createElement('div')
+        row.className = 'row' + (sel.has(f.id) ? ' sel' : '') + (focus?.id === f.id ? ' focus' : '')
+        row.style.paddingLeft = `${4 + depth * 16}px`
+        row.title = f.modifiedTime ? `수정: ${new Date(f.modifiedTime).toLocaleString()}` : ''
+        const twisty = document.createElement('span')
+        twisty.className = 'twisty'
+        if (dir) twisty.innerHTML = svg('M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z')
+        twisty.classList.toggle('open', isOpen)
+        twisty.onclick = (e) => { e.stopPropagation(); if (dir) toggle(f.id) }
+        twisty.ondblclick = (e) => e.stopPropagation()
+        const icon = document.createElement('img')
+        icon.className = 'ficon'
+        icon.alt = ''
+        icon.src = `icons/${dir ? (isOpen ? 'folder-open' : 'folder') : fileIcon(f)}.svg`
+        const name = document.createElement('span')
+        name.className = 'name'
+        name.textContent = f.name
+        const meta = document.createElement('span')
+        meta.className = 'size'
+        meta.textContent = sort.key === 'modified' && parent ? fmtDate(f.modifiedTime) : dir ? '' : fmtSize(f.size == null ? null : Number(f.size))
+        row.append(twisty, icon, name, meta)
+        if (parent) {
+          // 루트는 선택·이동·삭제 대상이 아니다.
+          order.push(f.id)
+          rowItems.set(f.id, item)
+          row.onclick = (e) => pick(item, e)
+          row.oncontextmenu = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!sel.has(f.id)) pick(item)
+            openMenu(e.clientX, e.clientY, itemMenu())
+          }
           row.draggable = true
-          row.title = f.modifiedTime ? new Date(f.modifiedTime).toLocaleString() : ''
-          const icon = document.createElement('span')
-          icon.textContent = isDir ? '📁' : '📄'
-          const name = document.createElement('span')
-          name.className = 'name'
-          name.textContent = f.name
-          const size = document.createElement('span')
-          size.className = 'size'
-          size.textContent = isDir ? '' : fmtSize(f.size == null ? null : Number(f.size))
-          row.append(icon, name, size)
-          row.onclick = () => { selected = f.id; render() }
-          row.ondblclick = () => (isDir ? go([...path, { id: f.id, name: f.name }]) : open(f))
-          row.ondragstart = (e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ id: f.id, from: here() }))
-          if (isDir) dropTarget(row, f.id)
-          list.append(row)
+          row.ondragstart = (e) => {
+            const items = sel.has(f.id) ? [...sel.values()] : [item]
+            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(items.map((i) => ({ id: i.id, from: i.parent }))))
+          }
+        } else row.onclick = () => clearSel()
+        row.ondblclick = () => (dir ? toggle(f.id) : open(f))
+        if (dir) dropTarget(row, f.id)
+        list.append(row)
+        if (!isOpen) return
+        if (!children.length) note(list, kids.has(f.id) ? '비어 있음' : '불러오는 중…', 4 + (depth + 1) * 16 + 22)
+        for (const c of children) addRow(list, c, f.id, depth + 1, show)
+      }
+
+      // ---- 선택 (Ctrl: 하나씩 더하기·빼기, Shift: 범위) ----
+      function pick(item, e = {}) {
+        if (e.shiftKey && anchor) {
+          if (!e.ctrlKey && !e.metaKey) sel.clear()
+          for (const id of rangeIds(order, anchor.id, item.id)) sel.set(id, rowItems.get(id))
+        } else if (e.ctrlKey || e.metaKey) {
+          if (sel.has(item.id)) sel.delete(item.id)
+          else sel.set(item.id, item)
+          anchor = item
+        } else {
+          sel.clear()
+          sel.set(item.id, item)
+          anchor = item
         }
-        $('del').disabled = !selected
+        focus = item
+        render()
+      }
+      function clearSel() {
+        sel.clear()
+        focus = anchor = null
+        render()
       }
 
-      function go(next) {
-        path = next
-        selected = null
-        load()
+      // ---- 키보드: ↑↓ 이동(Shift 범위), → 펼치기/첫 자식, ← 접기/부모, Enter 열기, F2 이름, Delete 휴지통 ----
+      $('list').onkeydown = (e) => {
+        const i = order.indexOf(focus?.id)
+        const go = (j) => {
+          const id = order[Math.max(0, Math.min(order.length - 1, j))]
+          if (id) pick(rowItems.get(id), { shiftKey: e.shiftKey })
+        }
+        const keys = {
+          ArrowDown: () => go(i < 0 ? 0 : i + 1),
+          ArrowUp: () => go(i < 0 ? 0 : i - 1),
+          Home: () => go(0),
+          End: () => go(order.length - 1),
+          ArrowRight: () => focus && isDir(focus) && (expanded.has(focus.id) ? go(i + 1) : toggle(focus.id)),
+          ArrowLeft: () => {
+            if (!focus) return
+            if (isDir(focus) && expanded.has(focus.id)) return toggle(focus.id)
+            const p = rowItems.get(focus.parent)
+            if (p) pick(p)
+          },
+          Enter: () => focus && (isDir(focus) ? toggle(focus.id) : open(focus)),
+          F2: () => focus && rename(focus),
+          Delete: () => trash(),
+          Escape: () => clearSel(),
+          a: () => {
+            if (!e.ctrlKey && !e.metaKey) return false
+            for (const id of order) sel.set(id, rowItems.get(id))
+            render()
+          }
+        }
+        if (!keys[e.key] || keys[e.key]() === false) return
+        e.preventDefault()
       }
 
-      async function open(f) {
+      // ---- 컨텍스트 메뉴 ----
+      function openMenu(x, y, items) {
+        const m = $('menu')
+        m.replaceChildren()
+        for (const it of items) {
+          if (it === '-') {
+            if (m.lastChild && m.lastChild.tagName !== 'HR') m.append(document.createElement('hr'))
+            continue
+          }
+          const b = document.createElement('button')
+          b.className = 'mi' + (it.danger ? ' danger' : '')
+          b.setAttribute('role', 'menuitem')
+          b.innerHTML = `<span class="ck">${it.checked ? svg(CHECK) : ''}</span><span class="lb"></span><span class="kb"></span>`
+          b.querySelector('.lb').textContent = it.label
+          b.querySelector('.kb').textContent = it.key ?? ''
+          b.onclick = () => {
+            closeMenu()
+            it.run()
+          }
+          m.append(b)
+        }
+        if (m.lastChild?.tagName === 'HR') m.lastChild.remove()
+        m.hidden = false
+        const r = m.getBoundingClientRect()
+        m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`
+        m.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`
+        m.querySelector('button')?.focus()
+      }
+      function closeMenu() {
+        $('menu').hidden = true
+      }
+      document.addEventListener('pointerdown', (e) => { if (!$('menu').contains(e.target)) closeMenu() })
+      addEventListener('blur', closeMenu)
+      $('menu').onkeydown = (e) => {
+        const items = [...$('menu').querySelectorAll('button')]
+        const i = items.indexOf(document.activeElement)
+        if (e.key === 'Escape') { closeMenu(); $('list').focus() }
+        else if (e.key === 'ArrowDown') items[(i + 1) % items.length].focus()
+        else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length].focus()
+        else return
+        e.preventDefault()
+      }
+
+      function itemMenu() {
+        const items = [...sel.values()]
+        const one = items.length === 1 ? items[0] : null
+        const files = items.filter((f) => !isDir(f) && !googleKind(f))
+        const kind = one && googleKind(one)
+        const m = []
+        if (one) {
+          if (isDir(one)) m.push({ label: expanded.has(one.id) ? '접기' : '펼치기', key: 'Enter', run: () => toggle(one.id) })
+          else m.push({ label: kind ? '브라우저에서 열기' : '열기', key: 'Enter', run: () => open(one) })
+          if (!kind || isDir(one)) m.push({ label: '웹에서 열기', run: () => openWeb(one) })
+          m.push({ label: '링크 복사', run: () => copyLink(one) })
+        }
+        m.push('-')
+        if (kind && EXPORTS[kind])
+          for (const [label, exportMime, ext] of EXPORTS[kind]) m.push({ label: `${label}로 다운로드`, run: () => download(one, { open: false, exportMime, name: withExt(one.name, ext) }) })
+        else if (files.length) m.push({ label: files.length > 1 ? `다운로드 (${files.length}개)` : '다운로드', run: () => files.forEach((f) => download(f, { open: false })) })
+        m.push('-')
+        if (one && isDir(one)) {
+          m.push({ label: '새 폴더', run: mkdir })
+          m.push({ label: '여기에 파일 업로드', run: () => $('pick').click() })
+        }
+        if (one) m.push({ label: '이름 바꾸기', key: 'F2', run: () => rename(one) })
+        if (one && !isDir(one)) m.push({ label: '사본 만들기', run: () => copy(one) })
+        m.push('-')
+        m.push({ label: items.length > 1 ? `휴지통으로 (${items.length}개)` : '휴지통으로', key: 'Del', danger: true, run: trash })
+        return m
+      }
+      // 빈 곳 우클릭: 내 드라이브 대상.
+      $('list').oncontextmenu = (e) => {
+        e.preventDefault()
+        clearSel()
+        openMenu(e.clientX, e.clientY, [
+          { label: '새 폴더', run: mkdir },
+          { label: '파일 업로드', run: () => $('pick').click() },
+          { label: '새로 고침', run: () => act('새로 고침', async () => {}, true) }
+        ])
+      }
+
+      // ---- 정렬 ----
+      $('sort').onclick = (e) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        const set = (p) => () => { sort = { ...sort, ...p }; render() }
+        openMenu(r.left, r.bottom + 4, [
+          { label: '이름', checked: sort.key === 'name', run: set({ key: 'name' }) },
+          { label: '수정한 날짜', checked: sort.key === 'modified', run: set({ key: 'modified' }) },
+          { label: '크기', checked: sort.key === 'size', run: set({ key: 'size' }) },
+          '-',
+          { label: '오름차순', checked: sort.dir === 1, run: set({ dir: 1 }) },
+          { label: '내림차순', checked: sort.dir === -1, run: set({ dir: -1 }) }
+        ])
+      }
+
+      // ---- 파일 동작 ----
+      // 더블클릭·Enter: 파일은 다운로드 폴더에 받아 기본 프로그램으로 연다. Google 문서·시트 등은 받을 파일이 없어 브라우저로 연다.
+      function open(f) {
+        if (googleKind(f)) return openWeb(f)
+        download(f, { open: true })
+      }
+      async function openWeb(f) {
         if (!f.webViewLink) return status('열 수 있는 링크가 없습니다', true)
         const r = await orca.shell?.openExternal(f.webViewLink).catch((e) => ({ opened: false, reason: e.message }))
         if (!r?.opened) status(`열지 못했습니다${r?.reason ? ': ' + r.reason : ''}`, true)
       }
+      async function copyLink(f) {
+        try {
+          await navigator.clipboard.writeText(f.webViewLink)
+        } catch {
+          // 클립보드 API가 막힌 경우
+          const t = Object.assign(document.createElement('textarea'), { value: f.webViewLink })
+          document.body.append(t)
+          t.select()
+          const ok = document.execCommand('copy')
+          t.remove()
+          if (!ok) return status(`복사하지 못했습니다: ${f.webViewLink}`, true)
+        }
+        status('링크를 복사했습니다 (공유 설정은 바뀌지 않습니다)')
+      }
 
-      // 폴더 행·경로 조각에 놓으면: 내부 항목은 이동, 바깥 파일은 그 폴더로 업로드.
+      async function rename(f) {
+        const { value, text } = await ask({ title: '이름 바꾸기', input: f.name, selectAll: isDir(f), buttons: [{ label: '바꾸기', value: 'ok', kind: 'primary' }] })
+        const name = text.trim()
+        if (!value || !name || name === f.name) return
+        act('이름 바꾸는 중', () => req('drive.rename', { id: f.id, name }), [f.parent])
+      }
+
+      function copy(f) {
+        const name = uniqueName(f.name, new Set((kids.get(f.parent) ?? []).map((s) => s.name)))
+        act('사본 만드는 중', () => req('drive.copy', { id: f.id, name }), [f.parent])
+      }
+
+      async function mkdir() {
+        const parent = here()
+        const { value, text } = await ask({ title: '새 폴더', input: '새 폴더', buttons: [{ label: '만들기', value: 'ok', kind: 'primary' }] })
+        const name = text.trim()
+        if (!value || !name) return
+        act('폴더 만드는 중', async () => {
+          await req('drive.mkdir', { parent, name })
+          expanded.add(parent)
+        }, [parent])
+      }
+
+      // 휴지통으로 이동(Drive에서 30일 안에 복구 가능). 팝업으로 확인한다.
+      async function trash() {
+        const items = [...sel.values()]
+        if (!items.length) return
+        const title = items.length > 1 ? `${items.length}개 항목을 휴지통으로 보낼까요?` : `'${items[0].name}'을(를) 휴지통으로 보낼까요?`
+        const { value } = await ask({ title, detail: 'Drive 휴지통에서 30일 안에 복구할 수 있습니다.', buttons: [{ label: '휴지통으로', value: 'ok', kind: 'danger' }] })
+        if (!value) return
+        await act(items.length > 1 ? `${items.length}개 삭제 중` : '삭제 중', async () => {
+          for (const f of items) {
+            await req('drive.trash', { id: f.id })
+            sel.delete(f.id)
+            if (focus?.id === f.id) focus = anchor = null
+          }
+        }, items.map((f) => f.parent))
+      }
+
+      function moveItems(items, to) {
+        items = items.filter((i) => i.id !== to && i.from !== to)
+        if (!items.length) return
+        act(items.length > 1 ? `${items.length}개 이동 중` : '이동 중', async () => {
+          for (const i of items) await req('drive.move', { id: i.id, from: i.from, to })
+        }, [to, ...items.map((i) => i.from)])
+      }
+
+      // ---- 전송 (다운로드·업로드 진행률과 취소) ----
+      const xfers = new Map() // id -> 행
+      const ended = new Set() // 행을 만들기 전에 끝난 작업(아주 작은 파일)
+      let pinger = null
+      function addXfer(id, label, cancel) {
+        if (ended.delete(id)) return
+        const el = document.createElement('div')
+        el.className = 'xfer'
+        el.innerHTML = `<span class="xl"></span><progress></progress><button class="icon" title="취소" aria-label="취소">${svg(CLOSE)}</button>`
+        el.querySelector('.xl').textContent = label
+        el.querySelector('button').onclick = cancel
+        $('xfers').append(el)
+        xfers.set(id, el)
+        // 요청이 없으면 Orca가 worker를 거둬 진행 중인 다운로드도 끊긴다: 전송 중엔 20초마다 깨워 둔다.
+        pinger ??= setInterval(() => {
+          if (xfers.size) return req('auth.status').catch(() => {})
+          clearInterval(pinger)
+          pinger = null
+        }, 20_000)
+      }
+      function xferProgress(id, done, total) {
+        const el = xfers.get(id)
+        if (!el || !total) return
+        const p = el.querySelector('progress')
+        p.max = total
+        p.value = done
+        p.title = `${fmtSize(done)} / ${fmtSize(total)}`
+      }
+      function endXfer(id) {
+        if (!xfers.has(id)) return ended.add(id)
+        xfers.get(id).remove()
+        xfers.delete(id)
+      }
+
+      async function download(f, { open = true, exportMime, name = f.name } = {}) {
+        try {
+          const { job } = await req('download.start', { id: f.id, name, exportMime, open })
+          addXfer(job, name, () => req('download.cancel', { job }))
+        } catch (e) {
+          status(e.message, true)
+        }
+      }
+      orca.plugin.on('download.progress', ({ job, received, total }) => xferProgress(job, received, total))
+      orca.plugin.on('download.done', ({ job, path }) => {
+        endXfer(job)
+        status(`저장했습니다: ${path}`)
+      })
+      orca.plugin.on('download.error', ({ job, cancelled, message }) => {
+        endXfer(job)
+        status(cancelled ? '다운로드를 취소했습니다' : `다운로드 실패: ${message}`, !cancelled)
+      })
+
+      const toBase64 = (blob) => new Promise((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result).slice(String(r.result).indexOf(',') + 1))
+        r.onerror = () => reject(r.error)
+        r.readAsDataURL(blob)
+      })
+
+      // tasks: [{ file, parent, fresh }]. fresh = 방금 만든 폴더 안이라 같은 이름 검사가 필요 없음.
+      async function uploadTasks(tasks, touched = []) {
+        const parents = new Set(touched)
+        if (!tasks.length) return refresh([...parents])
+        const xid = `up-${Date.now()}`
+        let cancelled = false
+        addXfer(xid, tasks.length > 1 ? `파일 ${tasks.length}개 업로드` : tasks[0].file.name, () => { cancelled = true })
+        const total = tasks.reduce((n, t) => n + t.file.size, 0) || 1
+        let sent = 0
+        try {
+          for (const t of tasks) {
+            if (cancelled) break
+            const { file } = t
+            let name = file.name
+            let replaceId
+            if (!t.fresh) {
+              const siblings = kids.get(t.parent) ?? (await fetchKids(t.parent))
+              const same = siblings.find((s) => s.name === name && !isDir(s))
+              if (same) {
+                const { value } = await ask({
+                  title: `'${name}'이(가) 이미 있습니다`,
+                  detail: '새 버전으로 덮어쓰면 이름·위치·공유가 그대로이고, 이전 내용은 Drive 버전 기록에 남습니다. 별도 저장은 번호를 붙인 새 파일로 올립니다.',
+                  buttons: [{ label: '별도 저장', value: 'keep' }, { label: '새 버전으로 덮어쓰기', value: 'replace', kind: 'primary' }]
+                })
+                if (!value) {
+                  sent += file.size
+                  continue
+                }
+                if (value === 'replace') replaceId = same.id
+                else name = uniqueName(name, new Set(siblings.map((s) => s.name)))
+              }
+            }
+            const { id } = await req('upload.start', { parent: t.parent, name, mimeType: file.type, size: file.size, replaceId })
+            parents.add(t.parent)
+            let offset = 0
+            do {
+              if (cancelled) {
+                await req('upload.cancel', { id })
+                break
+              }
+              const part = file.slice(offset, offset + CHUNK)
+              await req('upload.chunk', { id, offset, total: file.size, data: await toBase64(part) }, 120000)
+              offset += part.size
+              sent += part.size
+              xferProgress(xid, sent, total)
+            } while (offset < file.size)
+          }
+          status(cancelled ? '업로드를 취소했습니다' : '업로드했습니다')
+        } catch (e) {
+          status(`업로드 실패: ${e.message}`, true)
+        }
+        endXfer(xid)
+        await refresh([...parents])
+      }
+
+      // 폴더째 끌어다 놓으면 Drive에 같은 구조로 폴더를 만들고 파일을 올린다.
+      // ponytail: 끌어다 놓은 최상위 폴더와 같은 이름의 폴더가 있어도 합치지 않고 새로 만든다.
+      async function uploadEntries(entries, parent) {
+        const tasks = []
+        status('폴더 구조 만드는 중…')
+        try {
+          for (const e of entries) await walk(e, parent, tasks, false)
+        } catch (e) {
+          return status(e.message, true)
+        }
+        await uploadTasks(tasks, [parent])
+      }
+      async function walk(entry, parent, tasks, fresh) {
+        if (entry.isFile) return tasks.push({ file: await new Promise((res, rej) => entry.file(res, rej)), parent, fresh })
+        const { id } = await req('drive.mkdir', { parent, name: entry.name })
+        const reader = entry.createReader()
+        // readEntries는 한 번에 일부만 준다: 빈 배열이 올 때까지 부른다.
+        for (let batch; (batch = await new Promise((res, rej) => reader.readEntries(res, rej))).length; )
+          for (const e of batch) await walk(e, id, tasks, true)
+      }
+
+      // 폴더 행에 놓으면: 내부 항목은 이동, 바깥 파일·폴더는 그 폴더로 업로드.
       function dropTarget(el, folderId) {
         el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('over') })
         el.addEventListener('dragleave', () => el.classList.remove('over'))
@@ -197,12 +790,11 @@
 
       function handleDrop(dt, folderId) {
         const item = dt.getData(DRAG_TYPE)
-        if (item) {
-          const { id, from } = JSON.parse(item)
-          if (id === folderId || from === folderId) return
-          return act('이동 중', () => req('drive.move', { id, from, to: folderId }))
-        }
-        if (dt.files.length) upload([...dt.files], folderId)
+        if (item) return moveItems(JSON.parse(item), folderId)
+        // 항목은 drop 이벤트 안에서만 읽을 수 있어 먼저 꺼내 둔다.
+        const entries = [...dt.items].map((i) => i.webkitGetAsEntry?.()).filter(Boolean)
+        if (entries.some((e) => e.isDirectory)) return uploadEntries(entries, folderId)
+        if (dt.files.length) uploadTasks([...dt.files].map((file) => ({ file, parent: folderId })))
       }
 
       // 패널 빈 곳에 놓으면 지금 폴더가 대상.
@@ -214,30 +806,7 @@
         if (!$('main').hidden) handleDrop(e.dataTransfer, here())
       })
 
-      const toBase64 = (blob) => new Promise((resolve, reject) => {
-        const r = new FileReader()
-        r.onload = () => resolve(String(r.result).slice(String(r.result).indexOf(',') + 1))
-        r.onerror = () => reject(r.error)
-        r.readAsDataURL(blob)
-      })
-
-      // ponytail: 폴더째 끌어다 놓기는 지원하지 않는다(파일만). 필요하면 webkitGetAsEntry로 재귀 업로드.
-      async function upload(list, parent) {
-        await act('업로드', async () => {
-          for (const [i, file] of list.entries()) {
-            const label = list.length > 1 ? `(${i + 1}/${list.length}) ` : ''
-            const { id } = await req('upload.start', { parent, name: file.name, mimeType: file.type, size: file.size })
-            let offset = 0
-            do {
-              const part = file.slice(offset, offset + CHUNK)
-              status(`${label}${file.name} 업로드 ${file.size ? Math.round((offset / file.size) * 100) : 0}%`)
-              await req('upload.chunk', { id, offset, total: file.size, data: await toBase64(part) }, 120000)
-              offset += part.size
-            } while (offset < file.size)
-          }
-        })
-      }
-
+      // ---- 로그인·툴바 ----
       $('save').onclick = () => act('저장', async () => {
         await req('auth.config', { clientId: $('cid').value, clientSecret: $('csecret').value })
         await boot()
@@ -249,43 +818,43 @@
         const r = await orca.shell?.openExternal(authUrl).catch(() => null)
         $('openAuth').hidden = !!r?.opened
         status('브라우저에서 로그인하세요')
+        // 요청이 없으면 Orca가 worker를 거둬 콜백 서버도 죽는다: 로그인 대기 중(최대 5분) 계속 호출해 살려 둔다.
+        clearInterval(keepAlive)
+        const until = Date.now() + 5 * 60_000
+        keepAlive = setInterval(async () => {
+          const s = await req('auth.status').catch(() => null)
+          if (s?.signedIn || Date.now() > until || $('signin').hidden) clearInterval(keepAlive)
+          if (s?.signedIn) boot()
+        }, 20_000)
       }, false)
       $('openAuth').onclick = () => authUrl && orca.shell?.openExternal(authUrl)
       $('reset').onclick = () => show('setup')
 
-      $('logout').onclick = () => act('로그아웃', async () => { await req('auth.signOut'); await boot() }, false)
-      $('refresh').onclick = () => act('새로 고침', async () => {})
-      $('mkdir').onclick = () => { $('newFolder').hidden = false; $('folderName').focus() }
-      $('folderName').onkeydown = (e) => {
-        if (e.key === 'Escape') $('newFolder').hidden = true
-        if (e.key !== 'Enter' || !e.target.value.trim()) return
-        const name = e.target.value.trim()
-        e.target.value = ''
-        $('newFolder').hidden = true
-        act('폴더 만드는 중', () => req('drive.mkdir', { parent: here(), name }))
+      $('logout').onclick = async () => {
+        const { value } = await ask({ title: '로그아웃할까요?', detail: '다시 쓰려면 Google 계정으로 로그인해야 합니다.', buttons: [{ label: '로그아웃', value: 'ok', kind: 'danger' }] })
+        if (value) act('로그아웃', async () => { await req('auth.signOut'); await boot() }, false)
       }
-
-      // 두 번 눌러야 지운다(휴지통으로 이동, Drive에서 30일 안에 복구 가능).
-      let armed = null
-      function trash() {
-        const f = files.find((x) => x.id === selected)
-        if (!f) return
-        if (armed !== f.id) {
-          armed = f.id
-          $('del').textContent = '정말 삭제?'
-          status(`'${f.name}'을(를) 휴지통으로 보내려면 한 번 더 누르세요`)
-          setTimeout(() => { armed = null; $('del').textContent = '삭제' }, 3000)
-          return
-        }
-        armed = null
-        $('del').textContent = '삭제'
-        act('삭제 중', () => req('drive.trash', { id: f.id }))
+      $('openWeb').onclick = async () => {
+        const url = new URL('https://drive.google.com/drive/my-drive')
+        if ($('email').title) url.searchParams.set('authuser', $('email').title)
+        const r = await orca.shell?.openExternal(url.href).catch((e) => ({ opened: false, reason: e.message }))
+        if (!r?.opened) status(`열지 못했습니다${r?.reason ? ': ' + r.reason : ''}`, true)
       }
+      $('refresh').onclick = () => act('새로 고침', async () => {}, true)
+      $('mkdir').onclick = mkdir
       $('del').onclick = trash
-      $('list').onkeydown = (e) => {
-        if (e.key === 'Delete') trash()
-        if (e.key === 'Backspace' && path.length > 1) go(path.slice(0, -1))
+      $('upload').onclick = () => $('pick').click()
+      $('pick').onchange = () => {
+        const parent = here()
+        uploadTasks([...$('pick').files].map((file) => ({ file, parent })))
+        $('pick').value = ''
       }
+      // 펼친 폴더가 있으면 모두 접고, 없으면 지금까지 불러온 폴더를 모두 펼친다.
+      // ponytail: 누를 때마다 한 단계씩 더 깊이 불러온다. 드라이브 전체를 한 번에 펼치는 건 요청이 너무 많아서 안 한다.
+      $('fold').onclick = () => act(expanded.size > 1 ? '접는 중' : '펼치는 중', async () => {
+        if (expanded.size > 1) return expanded.clear(), expanded.add('root')
+        for (const files of kids.values()) for (const f of files) if (isDir(f)) expanded.add(f.id)
+      }, true)
 
       orca.plugin.on('auth.changed', () => boot())
       boot().catch((e) => status(e.message, true))
