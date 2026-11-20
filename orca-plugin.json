@@ -1,0 +1,28 @@
+{
+  "manifestVersion": 2,
+  "id": "google-drive",
+  "name": "Google Drive",
+  "version": "0.1.0",
+  "description": "Google Drive 파일 탐색, 열기, 드래그 업로드·이동, 폴더 생성·삭제를 Orca 사이드바에서 합니다.",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "worker.mjs",
+  "contributes": {
+    "panels": [
+      {
+        "id": "google-drive",
+        "title": "Google Drive",
+        "icon": "cloud",
+        "entry": "panel/index.html"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "secrets:own"
+    }
+  ]
+}

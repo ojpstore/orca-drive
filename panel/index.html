@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Google Drive</title>
+    <style>
+      * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--orca-border) transparent; }
+      [hidden] { display: none !important; }
+      html, body { height: 100%; }
+      body {
+        margin: 0; display: flex; flex-direction: column;
+        font: 13px/1.5 system-ui, 'Segoe UI', 'Malgun Gothic', sans-serif;
+        color: var(--orca-foreground); background: var(--orca-background);
+      }
+      body.dropping { outline: 2px dashed var(--orca-accent); outline-offset: -4px; }
+      button, input { font: inherit; color: inherit; }
+      button { background: var(--orca-muted); border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px); padding: 2px 8px; cursor: pointer; }
+      button:disabled { opacity: .5; cursor: default; }
+      button.danger { color: var(--orca-destructive-foreground, #e5484d); }
+      input { width: 100%; padding: 4px 6px; background: var(--orca-input, transparent); border: 1px solid var(--orca-border); border-radius: var(--orca-radius, 6px); }
+      .pad { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+      .muted { color: var(--orca-muted-foreground); font-size: 12px; }
+      .bar { display: flex; gap: 4px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--orca-border); }
+      .crumbs { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+      .crumbs span { cursor: pointer; padding: 0 4px; border-radius: 4px; }
+      .crumbs span:hover, .crumbs span.over { background: var(--orca-muted); }
+      #list { flex: 1; overflow: auto; }
+      .row { display: flex; gap: 6px; align-items: center; padding: 3px 10px; cursor: default; user-select: none; }
+      .row:hover { background: var(--orca-muted); }
+      .row.sel { background: var(--orca-accent); color: var(--orca-accent-foreground); }
+      .row.over { outline: 2px solid var(--orca-accent); outline-offset: -2px; }
+      .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .row .size { font-size: 11px; opacity: .7; }
+      #status { padding: 4px 10px; border-top: 1px solid var(--orca-border); min-height: 26px; }
+      #status.err { color: var(--orca-destructive-foreground, #e5484d); }
+    </style>
+  </head>
+  <body>
+    <!-- 1) OAuth 클라이언트 설정 -->
+    <section id="setup" class="pad" hidden>
+      <b>Google OAuth 클라이언트 설정</b>
+      <div class="muted">Google Cloud Console → API 및 서비스 → 사용자 인증 정보 → OAuth 클라이언트 ID(유형: 데스크톱 앱)를 만들고 Drive API를 사용 설정하세요. 값은 Orca 암호화 저장소에 저장됩니다.</div>
+      <input id="cid" placeholder="Client ID" />
+      <input id="csecret" placeholder="Client secret" type="password" />
+      <button id="save">저장</button>
+    </section>
+
+    <!-- 2) 로그인 -->
+    <section id="signin" class="pad" hidden>
+      <button id="login">Google 계정으로 로그인</button>
+      <button id="openAuth" hidden>브라우저에서 로그인 페이지 열기</button>
+      <div class="muted">브라우저에서 로그인을 마치면 자동으로 목록이 열립니다.</div>
+      <button id="reset">클라이언트 설정 다시 하기</button>
+    </section>
+
+    <!-- 3) 파일 목록 -->
+    <section id="main" hidden style="display: contents">
+      <div class="bar">
+        <div class="crumbs" id="crumbs"></div>
+        <button id="mkdir" title="새 폴더">＋폴더</button>
+        <button id="del" class="danger" title="휴지통으로 (Delete)" disabled>삭제</button>
+        <button id="refresh" title="새로 고침">⟳</button>
+        <button id="logout" title="로그아웃">⎋</button>
+      </div>
+      <div class="bar" id="newFolder" hidden>
+        <input id="folderName" placeholder="새 폴더 이름 (Enter)" />
+      </div>
+      <div id="list" tabindex="0"></div>
+    </section>
+
+    <div id="status" class="muted"></div>
+
+    <script type="module">
+      const $ = (id) => document.getElementById(id)
+      const FOLDER = 'application/vnd.google-apps.folder'
+      const DRAG_TYPE = 'application/x-drive-item'
+      // 재개 가능 업로드 조각은 256 KiB 배수여야 한다.
+      // ponytail: 1 MiB 조각을 base64로 worker에 넘긴다. 큰 파일이 느리면 조각을 키울 것.
+      const CHUNK = 1024 * 1024
+
+      let path = [{ id: 'root', name: '내 드라이브' }]
+      let files = []
+      let selected = null
+      let authUrl = null
+      const here = () => path[path.length - 1].id
+      const req = (name, input, timeoutMs = 60000) => orca.plugin.request(name, input, { timeoutMs })
+
+      function status(text, err = false) {
+        $('status').textContent = text
+        $('status').className = err ? 'err' : 'muted'
+      }
+      // 모든 동작을 여기로: 오류를 상태줄에 보이고, 끝나면 목록을 다시 읽는다.
+      async function act(label, fn, reload = true) {
+        status(label + '…')
+        try {
+          await fn()
+          status('')
+        } catch (e) {
+          status(e.message, true)
+        }
+        if (reload) await load()
+      }
+
+      function show(view) {
+        for (const v of ['setup', 'signin', 'main']) $(v).hidden = v !== view
+      }
+
+      async function boot() {
+        const s = await req('auth.status')
+        if (!s.configured) return show('setup')
+        if (!s.signedIn) return show('signin')
+        show('main')
+        await load()
+      }
+
+      async function load() {
+        if ($('main').hidden) return
+        try {
+          files = (await req('drive.list', { parent: here() })).files
+        } catch (e) {
+          files = []
+          status(e.message, true)
+        }
+        if (!files.some((f) => f.id === selected)) selected = null
+        render()
+      }
+
+      const fmtSize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
+
+      function render() {
+        const crumbs = $('crumbs')
+        crumbs.replaceChildren()
+        path.forEach((p, i) => {
+          if (i) crumbs.append('›')
+          const s = document.createElement('span')
+          s.textContent = p.name
+          s.onclick = () => go(path.slice(0, i + 1))
+          dropTarget(s, p.id)
+          crumbs.append(s)
+        })
+        const list = $('list')
+        list.replaceChildren()
+        if (!files.length) {
+          const e = document.createElement('div')
+          e.className = 'pad muted'
+          e.textContent = '비어 있습니다. 파일을 여기로 끌어다 놓으면 업로드됩니다.'
+          list.append(e)
+        }
+        for (const f of files) {
+          const isDir = f.mimeType === FOLDER
+          const row = document.createElement('div')
+          row.className = 'row' + (f.id === selected ? ' sel' : '')
+          row.draggable = true
+          row.title = f.modifiedTime ? new Date(f.modifiedTime).toLocaleString() : ''
+          const icon = document.createElement('span')
+          icon.textContent = isDir ? '📁' : '📄'
+          const name = document.createElement('span')
+          name.className = 'name'
+          name.textContent = f.name
+          const size = document.createElement('span')
+          size.className = 'size'
+          size.textContent = isDir ? '' : fmtSize(f.size == null ? null : Number(f.size))
+          row.append(icon, name, size)
+          row.onclick = () => { selected = f.id; render() }
+          row.ondblclick = () => (isDir ? go([...path, { id: f.id, name: f.name }]) : open(f))
+          row.ondragstart = (e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ id: f.id, from: here() }))
+          if (isDir) dropTarget(row, f.id)
+          list.append(row)
+        }
+        $('del').disabled = !selected
+      }
+
+      function go(next) {
+        path = next
+        selected = null
+        load()
+      }
+
+      async function open(f) {
+        if (!f.webViewLink) return status('열 수 있는 링크가 없습니다', true)
+        const r = await orca.shell?.openExternal(f.webViewLink).catch((e) => ({ opened: false, reason: e.message }))
+        if (!r?.opened) status(`열지 못했습니다${r?.reason ? ': ' + r.reason : ''}`, true)
+      }
+
+      // 폴더 행·경로 조각에 놓으면: 내부 항목은 이동, 바깥 파일은 그 폴더로 업로드.
+      function dropTarget(el, folderId) {
+        el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('over') })
+        el.addEventListener('dragleave', () => el.classList.remove('over'))
+        el.addEventListener('drop', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          el.classList.remove('over')
+          document.body.classList.remove('dropping')
+          handleDrop(e.dataTransfer, folderId)
+        })
+      }
+
+      function handleDrop(dt, folderId) {
+        const item = dt.getData(DRAG_TYPE)
+        if (item) {
+          const { id, from } = JSON.parse(item)
+          if (id === folderId || from === folderId) return
+          return act('이동 중', () => req('drive.move', { id, from, to: folderId }))
+        }
+        if (dt.files.length) upload([...dt.files], folderId)
+      }
+
+      // 패널 빈 곳에 놓으면 지금 폴더가 대상.
+      document.addEventListener('dragover', (e) => { e.preventDefault(); if (!$('main').hidden) document.body.classList.add('dropping') })
+      document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dropping') })
+      document.addEventListener('drop', (e) => {
+        e.preventDefault()
+        document.body.classList.remove('dropping')
+        if (!$('main').hidden) handleDrop(e.dataTransfer, here())
+      })
+
+      const toBase64 = (blob) => new Promise((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result).slice(String(r.result).indexOf(',') + 1))
+        r.onerror = () => reject(r.error)
+        r.readAsDataURL(blob)
+      })
+
+      // ponytail: 폴더째 끌어다 놓기는 지원하지 않는다(파일만). 필요하면 webkitGetAsEntry로 재귀 업로드.
+      async function upload(list, parent) {
+        await act('업로드', async () => {
+          for (const [i, file] of list.entries()) {
+            const label = list.length > 1 ? `(${i + 1}/${list.length}) ` : ''
+            const { id } = await req('upload.start', { parent, name: file.name, mimeType: file.type, size: file.size })
+            let offset = 0
+            do {
+              const part = file.slice(offset, offset + CHUNK)
+              status(`${label}${file.name} 업로드 ${file.size ? Math.round((offset / file.size) * 100) : 0}%`)
+              await req('upload.chunk', { id, offset, total: file.size, data: await toBase64(part) }, 120000)
+              offset += part.size
+            } while (offset < file.size)
+          }
+        })
+      }
+
+      $('save').onclick = () => act('저장', async () => {
+        await req('auth.config', { clientId: $('cid').value, clientSecret: $('csecret').value })
+        await boot()
+      }, false)
+
+      $('login').onclick = () => act('로그인 준비', async () => {
+        authUrl = (await req('auth.begin')).url
+        // 비동기 대기 뒤라 클릭 권한이 끝났을 수 있다: 실패하면 따로 여는 버튼을 보인다.
+        const r = await orca.shell?.openExternal(authUrl).catch(() => null)
+        $('openAuth').hidden = !!r?.opened
+        status('브라우저에서 로그인하세요')
+      }, false)
+      $('openAuth').onclick = () => authUrl && orca.shell?.openExternal(authUrl)
+      $('reset').onclick = () => show('setup')
+
+      $('logout').onclick = () => act('로그아웃', async () => { await req('auth.signOut'); await boot() }, false)
+      $('refresh').onclick = () => act('새로 고침', async () => {})
+      $('mkdir').onclick = () => { $('newFolder').hidden = false; $('folderName').focus() }
+      $('folderName').onkeydown = (e) => {
+        if (e.key === 'Escape') $('newFolder').hidden = true
+        if (e.key !== 'Enter' || !e.target.value.trim()) return
+        const name = e.target.value.trim()
+        e.target.value = ''
+        $('newFolder').hidden = true
+        act('폴더 만드는 중', () => req('drive.mkdir', { parent: here(), name }))
+      }
+
+      // 두 번 눌러야 지운다(휴지통으로 이동, Drive에서 30일 안에 복구 가능).
+      let armed = null
+      function trash() {
+        const f = files.find((x) => x.id === selected)
+        if (!f) return
+        if (armed !== f.id) {
+          armed = f.id
+          $('del').textContent = '정말 삭제?'
+          status(`'${f.name}'을(를) 휴지통으로 보내려면 한 번 더 누르세요`)
+          setTimeout(() => { armed = null; $('del').textContent = '삭제' }, 3000)
+          return
+        }
+        armed = null
+        $('del').textContent = '삭제'
+        act('삭제 중', () => req('drive.trash', { id: f.id }))
+      }
+      $('del').onclick = trash
+      $('list').onkeydown = (e) => {
+        if (e.key === 'Delete') trash()
+        if (e.key === 'Backspace' && path.length > 1) go(path.slice(0, -1))
+      }
+
+      orca.plugin.on('auth.changed', () => boot())
+      boot().catch((e) => status(e.message, true))
+    </script>
+  </body>
+</html>
