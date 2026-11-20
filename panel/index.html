@@ -81,6 +81,8 @@
       .xfer progress { width: 72px; height: 4px; accent-color: var(--orca-accent); }
       .xfer button.icon { width: 20px; height: 20px; }
       .xfer button.icon svg { width: 14px; height: 14px; }
+      #dlList .xfer { padding-left: 0; }
+      #dlList .xfer progress { width: 110px; }
     </style>
   </head>
   <body>
@@ -147,6 +149,21 @@
         <div id="confirmDetail" class="muted"></div>
         <input id="confirmInput" hidden />
         <div class="actions" id="confirmActions"></div>
+      </form>
+    </dialog>
+
+    <dialog id="moving">
+      <form method="dialog">
+        <b id="movingTitle"></b>
+        <progress id="movingBar" style="width: 100%; accent-color: var(--orca-accent)"></progress>
+        <div class="actions"><button>취소</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="dlModal">
+      <form method="dialog">
+        <b>다운로드 중…</b>
+        <div id="dlList"></div>
       </form>
     </dialog>
 
@@ -449,7 +466,9 @@
           }
         } else row.onclick = () => clearSel()
         row.ondblclick = () => (dir ? toggle(f.id) : open(f))
+        // 파일 행에 놓으면 그 파일이 있는 폴더로.
         if (dir) dropTarget(row, f.id)
+        else if (parent) dropTarget(row, parent)
         list.append(row)
         if (!isOpen) return
         if (!children.length) note(list, kids.has(f.id) ? '비어 있음' : '불러오는 중…', 4 + (depth + 1) * 16 + 22)
@@ -675,8 +694,28 @@
       function moveItems(items, to) {
         items = items.filter((i) => i.id !== to && i.from !== to)
         if (!items.length) return
-        act(items.length > 1 ? `${items.length}개 이동 중` : '이동 중', async () => {
-          for (const i of items) await req('drive.move', { id: i.id, from: i.from, to })
+        // 가운데 모달로 항목 수 기준 진행률을 보인다. 취소·Esc면 남은 항목은 옮기지 않는다.
+        const d = $('moving')
+        const bar = $('movingBar')
+        const label = items.length > 1 ? `${items.length}개 이동 중…` : `'${rowItems.get(items[0].id)?.name ?? '항목'}' 이동 중…`
+        $('movingTitle').textContent = label
+        bar.removeAttribute('value') // 한 개면 끝날 때까지 흐르는 막대
+        bar.max = items.length
+        let stop = false
+        d.onclose = () => { stop = true }
+        d.showModal()
+        act(label.slice(0, -1), async () => {
+          try {
+            for (const [n, i] of items.entries()) {
+              if (stop) break
+              await req('drive.move', { id: i.id, from: i.from, to })
+              if (items.length > 1) bar.value = n + 1
+              $('movingTitle').textContent = items.length > 1 ? `${items.length}개 이동 중… (${n + 1}/${items.length})` : label
+            }
+          } finally {
+            d.onclose = null
+            d.close()
+          }
         }, [to, ...items.map((i) => i.from)])
       }
 
@@ -684,14 +723,16 @@
       const xfers = new Map() // id -> 행
       const ended = new Set() // 행을 만들기 전에 끝난 작업(아주 작은 파일)
       let pinger = null
-      function addXfer(id, label, cancel) {
+      // modal이면 화면 가운데 창(뒷배경 어둡게)에 줄을 넣는다. 창은 그 안의 줄이 다 끝나면 닫힌다.
+      function addXfer(id, label, cancel, modal = false) {
         if (ended.delete(id)) return
         const el = document.createElement('div')
         el.className = 'xfer'
-        el.innerHTML = `<span class="xl"></span><progress></progress><button class="icon" title="취소" aria-label="취소">${svg(CLOSE)}</button>`
+        el.innerHTML = `<span class="xl"></span><progress></progress><button type="button" class="icon" title="취소" aria-label="취소">${svg(CLOSE)}</button>`
         el.querySelector('.xl').textContent = label
         el.querySelector('button').onclick = cancel
-        $('xfers').append(el)
+        $(modal ? 'dlList' : 'xfers').append(el)
+        if (modal && !$('dlModal').open) $('dlModal').showModal()
         xfers.set(id, el)
         // 요청이 없으면 Orca가 worker를 거둬 진행 중인 다운로드도 끊긴다: 전송 중엔 20초마다 깨워 둔다.
         pinger ??= setInterval(() => {
@@ -712,6 +753,7 @@
         if (!xfers.has(id)) return ended.add(id)
         xfers.get(id).remove()
         xfers.delete(id)
+        if (!$('dlList').children.length) $('dlModal').close()
       }
 
       async function download(f, { open = true, exportMime, name = f.name } = {}) {
@@ -721,11 +763,13 @@
           addXfer(job, name, () =>
             req('download.cancel', { job })
               .then((r) => r?.found, () => false)
-              .then((found) => found || (endXfer(job), status('다운로드가 이미 끊겼습니다', true))))
+              .then((found) => found || (endXfer(job), status('다운로드가 이미 끊겼습니다', true))), true)
         } catch (e) {
           status(e.message, true)
         }
       }
+      // Esc로 창만 닫혀 진행 중인 다운로드가 안 보이게 되지 않도록 막는다(취소는 ✕로).
+      $('dlModal').oncancel = (e) => e.preventDefault()
       orca.plugin.on('download.progress', ({ job, received, total }) => xferProgress(job, received, total))
       orca.plugin.on('download.done', ({ job, path }) => {
         endXfer(job)
@@ -841,13 +885,14 @@
         if (dt.files.length) uploadTasks([...dt.files].map((file) => ({ file, parent: folderId })))
       }
 
-      // 패널 빈 곳에 놓으면 지금 폴더가 대상.
+      // 패널 빈 곳에 놓으면: 업로드는 지금 폴더, 내부 항목 이동은 루트.
+      // (끌기 전 클릭으로 focus가 끌던 항목이 되므로 here()는 원래 폴더라 이동이 무시된다.)
       document.addEventListener('dragover', (e) => { e.preventDefault(); if (!$('main').hidden) document.body.classList.add('dropping') })
       document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.body.classList.remove('dropping') })
       document.addEventListener('drop', (e) => {
         e.preventDefault()
         document.body.classList.remove('dropping')
-        if (!$('main').hidden) handleDrop(e.dataTransfer, here())
+        if (!$('main').hidden) handleDrop(e.dataTransfer, e.dataTransfer.types.includes(DRAG_TYPE) ? 'root' : here())
       })
 
       // ---- 로그인·툴바 ----
