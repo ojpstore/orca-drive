@@ -57,6 +57,11 @@
       .who b { font-size: 12px; font-weight: 600; }
       .who span { font-size: 11px; color: var(--orca-muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .who span:empty { display: none; }
+      #status { display: flex; align-items: flex-start; gap: 6px; }
+      #statusText { flex: 1; min-width: 0; }
+      #statusText:empty + button { display: none; }
+      #status button.icon { width: 18px; height: 18px; flex: none; }
+      #status button.icon svg { width: 14px; height: 14px; }
       #status.err { color: #ff8a8a; background: rgb(229 72 77 / .16); border-top-color: rgb(229 72 77 / .5); font-weight: 500; }
       #list:focus { outline: none; }
       #list:focus .row.focus:not(.sel) { box-shadow: inset 0 0 0 1px var(--orca-accent); }
@@ -135,7 +140,7 @@
     </section>
 
     <div id="xfers"></div>
-    <div id="status" class="muted"></div>
+    <div id="status" class="muted"><span id="statusText"></span><button type="button" class="icon" id="statusClose" title="닫기" aria-label="닫기"></button></div>
     <div id="quotaWrap" class="muted" hidden>
       <div class="qh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>저장용량</div>
       <div id="quotaBar"><div id="quotaFill"></div></div>
@@ -211,7 +216,7 @@
       }
 
       function status(text, err = false) {
-        $('status').textContent = text
+        $('statusText').textContent = text
         $('status').className = err ? 'err' : ''
       }
       // 모든 동작을 여기로: 오류를 상태줄에 보이고, 끝나면 바뀐 폴더만 다시 읽는다(true면 전체).
@@ -918,6 +923,8 @@
       }, false)
       $('openAuth').onclick = () => authUrl && orca.shell?.openExternal(authUrl)
       $('reset').onclick = () => show('setup')
+      $('statusClose').innerHTML = svg(CLOSE)
+      $('statusClose').onclick = () => status('')
 
       $('logout').onclick = async () => {
         const { value } = await ask({ title: '로그아웃할까요?', detail: '다시 쓰려면 Google 계정으로 로그인해야 합니다.', buttons: [{ label: '로그아웃', value: 'ok', kind: 'danger' }] })
