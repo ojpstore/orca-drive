@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { join } from 'node:path'
-import { authUrl, contentRange, downloadPath, listQuery, searchQuery } from './worker.mjs'
+import activate, { authUrl, contentRange, downloadPath, listQuery, searchQuery } from './worker.mjs'
 import { EXPORTS, filterTree, googleKind, rangeIds, sortFiles, uniqueName, withExt } from './panel/lib.mjs'
 
 test('listQuery escapes quotes and backslashes', () => {
@@ -85,4 +85,35 @@ test('EXPORTS cover Google Docs, Sheets, Slides with office and pdf formats', ()
   assert.ok(EXPORTS.spreadsheet.some(([, , e]) => e === 'csv'))
   assert.equal(googleKind({ mimeType: 'application/vnd.google-apps.spreadsheet' }), 'spreadsheet')
   assert.equal(googleKind({ mimeType: 'text/plain' }), null)
+})
+
+test('upload.chunk buffers small pieces into 256 KiB-aligned PUTs', async () => {
+  const handlers = {}
+  const secrets = { clientId: 'c', clientSecret: 's', refreshToken: 'r' }
+  activate({ secrets: { get: async (k) => secrets[k] }, panels: { handle: (n, fn) => (handlers[n] = fn), post() {} } })
+  const puts = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes('oauth2')) return Response.json({ access_token: 'a', expires_in: 3600 })
+    if (init.method === 'POST') return new Response('', { headers: { location: 'S' } })
+    puts.push({ range: init.headers['content-range'], len: init.body.length })
+    return new Response('', { status: puts.length < 2 ? 308 : 200 })
+  }
+  try {
+    const total = 9 * 1024 * 1024
+    const { id } = await handlers['upload.start']({ name: 'x', size: total })
+    const piece = Buffer.alloc(40 * 1024).toString('base64')
+    let done
+    for (let sent = 0; sent < total; sent += 40 * 1024) {
+      const n = Math.min(40 * 1024, total - sent)
+      ;({ done } = await handlers['upload.chunk']({ id, total, data: n === 40 * 1024 ? piece : Buffer.alloc(n).toString('base64') }))
+    }
+    assert.equal(done, true)
+    assert.deepEqual(puts, [
+      { range: `bytes 0-${8 * 1024 * 1024 - 1}/${total}`, len: 8 * 1024 * 1024 },
+      { range: `bytes ${8 * 1024 * 1024}-${total - 1}/${total}`, len: 1024 * 1024 }
+    ])
+  } finally {
+    globalThis.fetch = realFetch
+  }
 })

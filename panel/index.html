@@ -38,7 +38,7 @@
       .row .ficon { width: 16px; height: 16px; flex: none; }
       .row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .row .size { font-size: 11px; opacity: .7; }
-      #status { padding: 4px 10px; border-top: 1px solid var(--orca-border); min-height: 26px; }
+      #status { padding: 5px 10px; border-top: 1px solid var(--orca-border); min-height: 26px; font-size: 12.5px; line-height: 1.4; color: var(--orca-foreground); word-break: keep-all; overflow-wrap: anywhere; }
       #quotaWrap { padding: 8px 12px 10px; border-top: 1px solid var(--orca-border); }
       #quotaWrap:not([hidden]) { display: flex; flex-direction: column; gap: 6px; }
       #quotaWrap .qh { display: flex; align-items: center; gap: 10px; color: var(--orca-foreground); font-size: 13px; }
@@ -57,7 +57,7 @@
       .who b { font-size: 12px; font-weight: 600; }
       .who span { font-size: 11px; color: var(--orca-muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .who span:empty { display: none; }
-      #status.err { color: var(--orca-destructive-foreground, #e5484d); }
+      #status.err { color: #ff8a8a; background: rgb(229 72 77 / .16); border-top-color: rgb(229 72 77 / .5); font-weight: 500; }
       #list:focus { outline: none; }
       #list:focus .row.focus:not(.sel) { box-shadow: inset 0 0 0 1px var(--orca-accent); }
       .search { flex: 1; min-width: 0; position: relative; }
@@ -155,8 +155,9 @@
 
       const $ = (id) => document.getElementById(id)
       const DRAG_TYPE = 'application/x-drive-items'
-      // 재개 가능 업로드 조각은 256 KiB 배수여야 한다. base64로 worker에 넘기므로 요청 하나가 ~5.5 MB.
-      const CHUNK = 4 * 1024 * 1024
+      // Orca는 패널이 보내는 메시지를 ~64 KiB(66560 B)로 자른다('message too large').
+      // base64는 4/3배로 커지므로 40 KiB 조각 → ~54 KB. Drive용 256 KiB 정렬은 worker가 모아서 맞춘다.
+      const CHUNK = 40 * 1024
       const svg = (d) => `<svg viewBox="0 0 24 24"><path d="${d}" /></svg>`
       const CHECK = 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'
       const CLOSE = 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'
@@ -179,12 +180,22 @@
       // 새 폴더·업로드 대상: 선택한 폴더, 파일이면 그 부모, 없으면 루트.
       const here = () => (!focus ? 'root' : isDir(focus) ? focus.id : focus.parent)
       // 입력은 JSON 값만 받는다: { exportMime: undefined } 같은 속성은 'Invalid input'이 나므로 JSON으로 한 번 걸러 뺀다.
-      const req = (name, input, timeoutMs = 60000) =>
-        orca.plugin.request(name, input === undefined ? input : JSON.parse(JSON.stringify(input)), { timeoutMs })
+      // 'too many messages'(초당 메시지 수 초과)는 retryable이라 잠시 기다렸다 다시 보낸다.
+      async function req(name, input, timeoutMs = 60000) {
+        const body = input === undefined ? input : JSON.parse(JSON.stringify(input))
+        for (;;) {
+          try {
+            return await orca.plugin.request(name, body, { timeoutMs })
+          } catch (e) {
+            if (e?.code !== 'rate_limited' && !/too many messages/.test(e?.message)) throw e
+            await new Promise((r) => setTimeout(r, e.retryAfterMs ?? 500))
+          }
+        }
+      }
 
       function status(text, err = false) {
         $('status').textContent = text
-        $('status').className = err ? 'err' : 'muted'
+        $('status').className = err ? 'err' : ''
       }
       // 모든 동작을 여기로: 오류를 상태줄에 보이고, 끝나면 바뀐 폴더만 다시 읽는다(true면 전체).
       async function act(label, fn, after = []) {
@@ -773,7 +784,7 @@
                 break
               }
               const part = file.slice(offset, offset + CHUNK)
-              await req('upload.chunk', { id, offset, total: file.size, data: await toBase64(part) }, 120000)
+              await req('upload.chunk', { id, total: file.size, data: await toBase64(part) }, 120000)
               offset += part.size
               sent += part.size
               xferProgress(xid, sent, total)

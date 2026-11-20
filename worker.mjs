@@ -13,6 +13,7 @@ tls.setDefaultCACertificates?.([...tls.getCACertificates('default'), ...tls.getC
 
 const API = 'https://www.googleapis.com/drive/v3/files'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files'
+const FLUSH = 8 * 1024 * 1024 // Drive 재개 가능 업로드 조각: 256 KiB 배수
 const TOKEN = 'https://oauth2.googleapis.com/token'
 const SCOPE = 'https://www.googleapis.com/auth/drive'
 export const FOLDER = 'application/vnd.google-apps.folder'
@@ -70,7 +71,7 @@ export function deactivate() {
 
 export default function activate(orca) {
   let token = null // { access, exp }
-  const uploads = new Map() // id -> 재개 가능 업로드 세션 URL
+  const uploads = new Map() // id -> { session, sent, buf: Buffer[], len }
 
   const secret = (k) => orca.secrets.get(k)
   // 입력 없이 불려도(null) 구조 분해가 깨지지 않게.
@@ -275,17 +276,30 @@ export default function activate(orca) {
     })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error?.message || `upload ${res.status}`)
     const id = b64url(randomBytes(9))
-    uploads.set(id, res.headers.get('location'))
+    uploads.set(id, { session: res.headers.get('location'), sent: 0, buf: [], len: 0 })
     return { id }
   })
 
-  // 한 조각(base64)을 올린다. 308 = 계속, 200/201 = 끝.
-  on('upload.chunk', async ({ id, offset, total, data }) => {
-    const session = uploads.get(id)
-    if (!session) throw new Error('업로드 세션이 없습니다')
-    const body = Buffer.from(data, 'base64')
-    const res = await fetch(session, { method: 'PUT', headers: { 'content-range': contentRange(offset, body.length, total) }, body })
-    if (res.status === 308) return { done: false }
+  // 패널→worker 메시지는 ~64 KiB가 한도라 패널은 작은 조각(base64)을 보낸다.
+  // worker가 모아서 FLUSH(256 KiB 배수) 단위로 Drive에 PUT한다. 308 = 계속, 200/201 = 끝.
+  on('upload.chunk', async ({ id, total, data }) => {
+    const u = uploads.get(id)
+    if (!u) throw new Error('업로드 세션이 없습니다')
+    const part = Buffer.from(data, 'base64')
+    u.buf.push(part)
+    u.len += part.length
+    const last = u.sent + u.len >= total
+    if (!last && u.len < FLUSH) return { done: false }
+    const all = Buffer.concat(u.buf)
+    const body = last ? all : all.subarray(0, FLUSH)
+    const rest = last ? Buffer.alloc(0) : all.subarray(FLUSH)
+    const res = await fetch(u.session, { method: 'PUT', headers: { 'content-range': contentRange(u.sent, body.length, total) }, body })
+    if (res.status === 308) {
+      u.sent += body.length
+      u.buf = rest.length ? [rest] : []
+      u.len = rest.length
+      return { done: false }
+    }
     uploads.delete(id)
     if (!res.ok) throw new Error(`upload ${res.status}: ${await res.text()}`)
     return { done: true }
@@ -293,9 +307,9 @@ export default function activate(orca) {
 
   // 업로드 취소: 세션을 지우면 Drive가 받은 조각을 버린다.
   on('upload.cancel', async ({ id }) => {
-    const session = uploads.get(id)
+    const u = uploads.get(id)
     uploads.delete(id)
-    if (session) await fetch(session, { method: 'DELETE' }).catch(() => {})
+    if (u) await fetch(u.session, { method: 'DELETE' }).catch(() => {})
     return {}
   })
 }
