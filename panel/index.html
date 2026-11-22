@@ -186,6 +186,9 @@
       const UNFOLD_LESS = 'M7.41 18.59L8.83 20 12 16.83 15.17 20l1.41-1.41L12 14l-4.59 4.59zm9.18-13.18L15.17 4 12 7.17 8.83 4 7.41 5.41 12 10l4.59-4.59z'
 
       const ROOT = { id: 'root', name: '내 드라이브', mimeType: FOLDER }
+      // 루트 아래 가상 구역: 폴더처럼 펼치면 worker가 id('@…')에 맞는 목록을 돌려준다.
+      const SECTIONS = [['@shared', '공유 문서함'], ['@drives', '공유 드라이브'], ['@starred', '중요 문서함'], ['@recent', '최근 문서'], ['@trash', '휴지통']].map(([id, name]) => ({ id, name, mimeType: FOLDER }))
+      const isSection = (id) => id.startsWith('@')
       const kids = new Map() // 폴더 id -> 불러온 자식 목록
       const expanded = new Set(['root'])
       const sel = new Map() // 선택한 항목: id -> { ...file, parent }
@@ -308,7 +311,8 @@
 
       // 바뀐 폴더만 다시 읽는다(만들기·삭제·이동·이름 바꾸기·업로드 뒤). 아직 안 불러온 폴더는 건너뛴다.
       async function refresh(ids) {
-        const todo = [...new Set(ids)].filter((id) => kids.has(id) || expanded.has(id))
+        // 이미 불러온 구역(별표·휴지통 등)은 어떤 동작 뒤에도 바뀔 수 있어 함께 다시 읽는다.
+        const todo = [...new Set([...ids, ...SECTIONS.map((s) => s.id)])].filter((id) => kids.has(id) || expanded.has(id))
         await Promise.all(todo.map((id) => fetchKids(id, true).catch((e) => status(e.message, true))))
         if (results) await search().catch((e) => status(e.message, true))
         prune()
@@ -411,6 +415,7 @@
         } else {
           const show = filter ? filterTree(kids, 'root', filter) : null
           addRow(list, ROOT, null, 0, show)
+          if (!show) for (const s of SECTIONS) addRow(list, s, null, 0, null)
           if (show && !show.size) note(list, '불러온 폴더에 일치하는 항목이 없습니다. Enter: Drive 전체 검색')
         }
         list.querySelector('.focus')?.scrollIntoView({ block: 'nearest' })
@@ -427,7 +432,8 @@
 
       function addRow(list, f, parent, depth, show) {
         const dir = isDir(f)
-        const children = dir ? sortFiles((kids.get(f.id) ?? []).filter((c) => !show || show.has(c.id)), sort.key, sort.dir) : []
+        const shown = dir ? (kids.get(f.id) ?? []).filter((c) => !show || show.has(c.id)) : []
+        const children = f.id === '@recent' ? shown : sortFiles(shown, sort.key, sort.dir) // 최근 문서는 서버의 최신순 그대로
         // 필터 중엔 일치하는 하위 항목이 있는 폴더를 펼쳐 보인다.
         const isOpen = dir && (expanded.has(f.id) || (!!show && children.length > 0))
         const item = { ...f, parent }
@@ -471,12 +477,13 @@
         } else row.onclick = () => clearSel()
         row.ondblclick = () => (dir ? toggle(f.id) : open(f))
         // 파일 행에 놓으면 그 파일이 있는 폴더로.
-        if (dir) dropTarget(row, f.id)
+        if (dir && !isSection(f.id)) dropTarget(row, f.id)
         else if (parent) dropTarget(row, parent)
         list.append(row)
         if (!isOpen) return
         if (!children.length) note(list, kids.has(f.id) ? '비어 있음' : '불러오는 중…', 4 + (depth + 1) * 16 + 22)
-        for (const c of children) addRow(list, c, f.id, depth + 1, show)
+        // 구역 안 항목의 동작(이동·삭제 뒤 새로 고침)은 실제 부모 폴더 기준이다.
+        for (const c of children) addRow(list, c, isSection(f.id) ? c.parents?.[0] ?? 'root' : f.id, depth + 1, show)
       }
 
       // ---- 선택 (Ctrl: 하나씩 더하기·빼기, Shift: 범위) ----
@@ -583,12 +590,19 @@
         const one = items.length === 1 ? items[0] : null
         const files = items.filter((f) => !isDir(f) && !googleKind(f))
         const kind = one && googleKind(one)
+        if (items.length && items.every((f) => f.trashed))
+          return [
+            { label: items.length > 1 ? `복구 (${items.length}개)` : '복구', run: () => restore(items) },
+            '-',
+            { label: items.length > 1 ? `영구 삭제 (${items.length}개)` : '영구 삭제', key: 'Del', danger: true, run: () => purge(items) }
+          ]
         const m = []
         if (one) {
           if (isDir(one)) m.push({ label: expanded.has(one.id) ? '접기' : '펼치기', key: 'Enter', run: () => toggle(one.id) })
           else if (kind) m.push({ label: '브라우저에서 열기', key: 'Enter', run: () => open(one) })
           if (!kind || isDir(one)) m.push({ label: '웹에서 열기', run: () => openWeb(one) })
           m.push({ label: '링크 복사', run: () => copyLink(one) })
+          m.push({ label: '링크 공유 설정…', run: () => shareLink(one) })
         }
         m.push('-')
         if (kind && EXPORTS[kind])
@@ -601,6 +615,8 @@
         }
         if (one) m.push({ label: '이름 바꾸기', key: 'F2', run: () => rename(one) })
         if (one && !isDir(one)) m.push({ label: '사본 만들기', run: () => copy(one) })
+        m.push('-')
+        m.push({ label: items.every((f) => f.starred) ? '별표 해제' : '별표 추가', run: () => star(items) })
         m.push('-')
         m.push({ label: items.length > 1 ? `휴지통으로 (${items.length}개)` : '휴지통으로', key: 'Del', danger: true, run: trash })
         return m
@@ -642,7 +658,7 @@
         const r = await orca.shell?.openExternal(f.webViewLink).catch((e) => ({ opened: false, reason: e.message }))
         if (!r?.opened) status(`열지 못했습니다${r?.reason ? ': ' + r.reason : ''}`, true)
       }
-      async function copyLink(f) {
+      async function copyLink(f, done = '링크를 복사했습니다 (공유 설정은 바뀌지 않습니다)') {
         try {
           await navigator.clipboard.writeText(f.webViewLink)
         } catch {
@@ -654,7 +670,52 @@
           t.remove()
           if (!ok) return status(`복사하지 못했습니다: ${f.webViewLink}`, true)
         }
-        status('링크를 복사했습니다 (공유 설정은 바뀌지 않습니다)')
+        status(done)
+      }
+
+      // '링크가 있는 모든 사용자' 권한을 확인·바꾼다. 켜면 링크도 복사한다.
+      async function shareLink(f) {
+        let role
+        status('공유 상태 확인 중…')
+        try {
+          role = (await req('drive.sharing', { id: f.id })).role
+          status('')
+        } catch (e) {
+          return status(e.message, true)
+        }
+        const now = { reader: '링크가 있는 모든 사용자 · 보기', commenter: '링크가 있는 모든 사용자 · 댓글', writer: '링크가 있는 모든 사용자 · 편집' }[role] ?? (role ? '링크가 있는 모든 사용자' : '제한됨 (추가한 사용자만)')
+        const { value } = await ask({
+          title: `'${f.name}' 링크 공유`,
+          detail: `현재: ${now}`,
+          buttons: [...(role ? [{ label: '공유 해제', value: 'none', kind: 'danger' }] : []), { label: '보기 가능', value: 'reader' }, { label: '편집 가능', value: 'writer', kind: 'primary' }]
+        })
+        if (!value) return
+        await act('공유 설정 중', () => req('drive.share', { id: f.id, role: value === 'none' ? null : value }))
+        if (value === 'none') status('링크 공유를 해제했습니다')
+        else copyLink(f, `링크를 복사했습니다 (${value === 'writer' ? '편집' : '보기'} 가능)`)
+      }
+
+      // 별표: 선택이 모두 별표면 해제, 아니면 모두 추가.
+      function star(items) {
+        const on = !items.every((f) => f.starred)
+        act(on ? '별표 추가 중' : '별표 해제 중', async () => { for (const f of items) await req('drive.star', { id: f.id, starred: on }) }, items.map((f) => f.parent))
+      }
+
+      function restore(items) {
+        act('복구 중', async () => { for (const f of items) await req('drive.restore', { id: f.id }) }, items.map((f) => f.parent))
+      }
+
+      async function purge(items) {
+        const title = items.length > 1 ? `${items.length}개 항목을 영구 삭제할까요?` : `'${items[0].name}'을(를) 영구 삭제할까요?`
+        const { value } = await ask({ title, detail: '되돌릴 수 없습니다.', buttons: [{ label: '영구 삭제', value: 'ok', kind: 'danger' }] })
+        if (!value) return
+        await act('영구 삭제 중', async () => {
+          for (const f of items) {
+            await req('drive.delete', { id: f.id })
+            sel.delete(f.id)
+            if (focus?.id === f.id) focus = anchor = null
+          }
+        }, items.map((f) => f.parent))
       }
 
       async function rename(f) {
@@ -684,6 +745,7 @@
       async function trash() {
         const items = [...sel.values()]
         if (!items.length) return
+        if (items.every((f) => f.trashed)) return purge(items) // 휴지통 안에서 Del은 영구 삭제
         const title = items.length > 1 ? `${items.length}개 항목을 휴지통으로 보낼까요?` : `'${items[0].name}'을(를) 휴지통으로 보낼까요?`
         const { value } = await ask({ title, detail: 'Drive 휴지통에서 30일 안에 복구할 수 있습니다.', buttons: [{ label: '휴지통으로', value: 'ok', kind: 'danger' }] })
         if (!value) return

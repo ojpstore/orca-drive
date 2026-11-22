@@ -117,3 +117,62 @@ test('upload.chunk buffers small pieces into 256 KiB-aligned PUTs', async () => 
     globalThis.fetch = realFetch
   }
 })
+
+// fetch를 가짜로 바꿔 worker 핸들러가 보내는 요청을 기록한다.
+async function withWorker(respond, run) {
+  const handlers = {}
+  const secrets = { clientId: 'c', clientSecret: 's', refreshToken: 'r' }
+  activate({ secrets: { get: async (k) => secrets[k] }, panels: { handle: (n, fn) => (handlers[n] = fn), post() {} } })
+  const calls = []
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes('oauth2')) return Response.json({ access_token: 'a', expires_in: 3600 })
+    calls.push({ url: new URL(url), method: init.method ?? 'GET', body: init.body && JSON.parse(init.body) })
+    return respond(calls.at(-1))
+  }
+  try {
+    await run(handlers, calls)
+  } finally {
+    globalThis.fetch = realFetch
+  }
+}
+
+test('drive.list maps virtual sections to queries and lists shared drives', async () => {
+  await withWorker((c) => Response.json(c.url.pathname.endsWith('/drives') ? { drives: [{ id: 'D1', name: '팀' }] } : { files: [] }), async (h, calls) => {
+    await h['drive.list']({ parent: '@starred' })
+    assert.equal(calls[0].url.searchParams.get('q'), 'starred = true and trashed = false')
+    assert.equal(calls[0].url.searchParams.get('includeItemsFromAllDrives'), 'true')
+    assert.equal(calls[0].url.searchParams.get('supportsAllDrives'), 'true')
+    await h['drive.list']({ parent: '@trash' })
+    assert.equal(calls[1].url.searchParams.get('q'), 'trashed = true')
+    await h['drive.list']({ parent: '@recent' })
+    assert.equal(calls[2].url.searchParams.get('orderBy'), 'modifiedTime desc')
+    assert.equal(calls[2].url.searchParams.get('pageSize'), '50')
+    assert.deepEqual((await h['drive.list']({ parent: '@drives' })).files, [{ id: 'D1', name: '팀', mimeType: F }])
+    await h['drive.list']({ parent: 'abc' })
+    assert.equal(calls.at(-1).url.searchParams.get('q'), "'abc' in parents and trashed = false")
+  })
+})
+
+test('star, restore, delete', async () => {
+  await withWorker(() => new Response(null, { status: 204 }), async (h, calls) => {
+    await h['drive.star']({ id: 'x', starred: true })
+    await h['drive.restore']({ id: 'x' })
+    await h['drive.delete']({ id: 'x' })
+    assert.deepEqual(calls.map((c) => [c.method, c.body]), [['PATCH', { starred: true }], ['PATCH', { trashed: false }], ['DELETE', undefined]])
+  })
+})
+
+test('drive.share creates, updates and removes the anyone-with-link permission', async () => {
+  let perms = []
+  await withWorker((c) => Response.json(c.method === 'GET' ? { permissions: perms } : {}), async (h, calls) => {
+    await h['drive.share']({ id: 'x', role: 'reader' })
+    assert.deepEqual([calls[1].method, calls[1].body], ['POST', { type: 'anyone', role: 'reader' }])
+    perms = [{ id: 'p1', type: 'anyone', role: 'reader' }, { id: 'p2', type: 'user', role: 'writer' }]
+    assert.deepEqual(await h['drive.sharing']({ id: 'x' }), { role: 'reader' })
+    await h['drive.share']({ id: 'x', role: 'writer' })
+    assert.deepEqual([calls.at(-1).method, calls.at(-1).url.pathname.endsWith('/permissions/p1'), calls.at(-1).body], ['PATCH', true, { role: 'writer' }])
+    await h['drive.share']({ id: 'x', role: null })
+    assert.deepEqual([calls.at(-1).method, calls.at(-1).url.pathname.endsWith('/permissions/p1')], ['DELETE', true])
+  })
+})

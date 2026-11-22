@@ -17,12 +17,19 @@ const FLUSH = 8 * 1024 * 1024 // Drive 재개 가능 업로드 조각: 256 KiB �
 const TOKEN = 'https://oauth2.googleapis.com/token'
 const SCOPE = 'https://www.googleapis.com/auth/drive'
 export const FOLDER = 'application/vnd.google-apps.folder'
-const FIELDS = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,parents)'
+const FIELDS = 'nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,parents,starred,trashed)'
 
 // Drive 검색식의 문자열 리터럴은 ' 와 \ 를 \ 로 이스케이프한다.
 const lit = (v) => `'${String(v).replace(/['\\]/g, '\\$&')}'`
 export const listQuery = (parent) => `${lit(parent)} in parents and trashed = false`
 // 이름 또는 본문에 text가 들어간 파일(휴지통 제외).
+// 루트 아래 가상 구역: 패널이 이 id를 폴더처럼 열면 worker가 해당 조회로 바꿔 준다. '@drives'는 /drives 목록.
+export const SECTIONS = {
+  '@shared': { q: 'sharedWithMe = true and trashed = false' },
+  '@starred': { q: 'starred = true and trashed = false' },
+  '@recent': { q: `trashed = false and mimeType != '${FOLDER}'`, orderBy: 'modifiedTime desc', pageSize: '50', once: true },
+  '@trash': { q: 'trashed = true' }
+}
 export const searchQuery = (text) => `(name contains ${lit(text)} or fullText contains ${lit(text)}) and trashed = false`
 
 export function authUrl({ clientId, redirect, challenge, state }) {
@@ -103,6 +110,8 @@ export default function activate(orca) {
   }
 
   async function api(url, init = {}) {
+    // 공유 드라이브 항목도 다루도록 모든 files 호출에 붙인다.
+    if (url.startsWith(API)) url += (url.includes('?') ? '&' : '?') + 'supportsAllDrives=true'
     const res = await fetch(url, { ...init, headers: { authorization: `Bearer ${await accessToken()}`, ...init.headers } })
     if (res.status === 204) return null
     const json = await res.json().catch(() => ({}))
@@ -177,13 +186,28 @@ export default function activate(orca) {
 
   on('drive.list', async ({ parent = 'root' }) => {
     const files = []
+    const sec = SECTIONS[parent]
     let pageToken = ''
     do {
-      const q = new URLSearchParams({ q: listQuery(parent), fields: FIELDS, orderBy: 'folder,name', pageSize: '1000' })
-      if (pageToken) q.set('pageToken', pageToken)
-      const r = await api(`${API}?${q}`)
-      files.push(...r.files)
-      pageToken = r.nextPageToken
+      let r
+      if (parent === '@drives') {
+        const q = new URLSearchParams({ pageSize: '100', fields: 'nextPageToken,drives(id,name)' })
+        if (pageToken) q.set('pageToken', pageToken)
+        r = await api(`https://www.googleapis.com/drive/v3/drives?${q}`)
+        files.push(...r.drives.map((d) => ({ ...d, mimeType: FOLDER })))
+      } else {
+        const q = new URLSearchParams({
+          q: sec?.q ?? listQuery(parent),
+          fields: FIELDS,
+          orderBy: sec?.orderBy ?? 'folder,name',
+          pageSize: sec?.pageSize ?? '1000',
+          includeItemsFromAllDrives: 'true'
+        })
+        if (pageToken) q.set('pageToken', pageToken)
+        r = await api(`${API}?${q}`)
+        files.push(...r.files)
+      }
+      pageToken = sec?.once ? '' : r.nextPageToken
     } while (pageToken)
     return { files }
   })
@@ -198,7 +222,7 @@ export default function activate(orca) {
     jobs.set(job, ac)
     const url = exportMime
       ? `${API}/${encodeURIComponent(id)}/export?mimeType=${encodeURIComponent(exportMime)}`
-      : `${API}/${encodeURIComponent(id)}?alt=media`
+      : `${API}/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`
     const run = async () => {
       let path
       try {
@@ -256,6 +280,27 @@ export default function activate(orca) {
   // 휴지통으로 보낸다(30일 안에 Drive에서 복구 가능).
   on('drive.trash', ({ id }) => api(`${API}/${encodeURIComponent(id)}?fields=id`, jsonInit('PATCH', { trashed: true })))
 
+  on('drive.star', ({ id, starred }) => api(`${API}/${encodeURIComponent(id)}?fields=id`, jsonInit('PATCH', { starred: !!starred })))
+
+  on('drive.restore', ({ id }) => api(`${API}/${encodeURIComponent(id)}?fields=id`, jsonInit('PATCH', { trashed: false })))
+
+  // 영구 삭제: 되돌릴 수 없다.
+  on('drive.delete', ({ id }) => api(`${API}/${encodeURIComponent(id)}`, { method: 'DELETE' }))
+
+  // '링크가 있는 모든 사용자' 권한. role: 'reader' | 'writer', null이면 해제.
+  const anyone = async (id) =>
+    (await api(`${API}/${encodeURIComponent(id)}/permissions?fields=permissions(id,type,role)&pageSize=100`)).permissions?.find((p) => p.type === 'anyone')
+  on('drive.sharing', async ({ id }) => ({ role: (await anyone(id))?.role ?? null }))
+  on('drive.share', async ({ id, role }) => {
+    const cur = await anyone(id)
+    const base = `${API}/${encodeURIComponent(id)}/permissions`
+    if (!role) {
+      if (cur) await api(`${base}/${cur.id}`, { method: 'DELETE' })
+    } else if (cur) await api(`${base}/${cur.id}?fields=id`, jsonInit('PATCH', { role }))
+    else await api(`${base}?fields=id`, jsonInit('POST', { type: 'anyone', role }))
+    return {}
+  })
+
   on('drive.move', ({ id, from, to }) => {
     const q = new URLSearchParams({ addParents: to, removeParents: from, fields: 'id' })
     return api(`${API}/${encodeURIComponent(id)}?${q}`, jsonInit('PATCH', {}))
@@ -264,7 +309,7 @@ export default function activate(orca) {
   // replaceId가 있으면 그 파일의 새 버전으로 올린다(이름·위치·공유 유지).
   on('upload.start', async ({ parent = 'root', name, mimeType, size, replaceId }) => {
     const url = replaceId ? `${UPLOAD}/${encodeURIComponent(replaceId)}` : UPLOAD
-    const res = await fetch(`${url}?uploadType=resumable&fields=id`, {
+    const res = await fetch(`${url}?uploadType=resumable&supportsAllDrives=true&fields=id`, {
       method: replaceId ? 'PATCH' : 'POST',
       headers: {
         authorization: `Bearer ${await accessToken()}`,
