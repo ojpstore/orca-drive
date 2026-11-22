@@ -633,7 +633,8 @@
       // ---- 파일 동작 ----
       // 더블클릭·Enter: 파일은 다운로드 폴더에 받아 기본 프로그램으로 연다. Google 문서·시트 등은 받을 파일이 없어 브라우저로 연다.
       function open(f) {
-        if (googleKind(f)) return openWeb(f)
+        // Office 파일(docx·xlsx·pptx 등)은 Drive 뷰어(webViewLink)로 연다.
+        if (googleKind(f) || /\.(docx?|xlsx?|pptx?|dotx?|xltx?|potx?|ppsx?|xlsm|docm|pptm|odt|ods|odp)$/i.test(f.name)) return openWeb(f)
         download(f, { open: true })
       }
       async function openWeb(f) {
